@@ -3,6 +3,8 @@ import { useLabStore } from '../../stores/lab-store'
 import type { ProcessedPose } from '../../types/motion'
 import { drawPose } from './draw-pose'
 import { TrackingSession } from './tracking-session'
+import { publishPose, setPoseAspectRatio } from './pose-stream'
+import { useRobotStore } from '../../stores/robot-store'
 
 export function useMotionTracking() {
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -11,13 +13,14 @@ export function useMotionTracking() {
   const poseRef = useRef<ProcessedPose | null>(null)
   const [videoSize, setVideoSize] = useState({ width: 1280, height: 720 })
   const running = useLabStore((state) => state.session.status === 'running')
+  const robotMode = useRobotStore((state) => state.mode)
 
   useEffect(() => {
     const video = videoRef.current
     if (!video) return
     const session = new TrackingSession(video, {
       onState: (state) => useLabStore.getState().setSession(state),
-      onPose: (pose) => { poseRef.current = pose },
+      onPose: (pose) => { poseRef.current = pose; publishPose(pose) },
       onMetrics: (metrics) => {
         const store = useLabStore.getState()
         if (store.session.status !== 'running') return
@@ -35,6 +38,7 @@ export function useMotionTracking() {
     sessionRef.current = session
     const updateDimensions = () => {
       if (video.videoWidth > 0 && video.videoHeight > 0) {
+        setPoseAspectRatio(video.videoWidth / video.videoHeight)
         setVideoSize({ width: video.videoWidth, height: video.videoHeight })
       }
     }
@@ -47,6 +51,11 @@ export function useMotionTracking() {
       video.removeEventListener('resize', updateDimensions)
     }
   }, [])
+
+  useEffect(() => {
+    // The explicit demo source never leaves a webcam session capturing in the background.
+    if (robotMode === 'demo') sessionRef.current?.stop()
+  }, [robotMode])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -78,6 +87,7 @@ export function useMotionTracking() {
   }, [running])
 
   const start = useCallback(() => {
+    useRobotStore.getState().setMode('tracking')
     void sessionRef.current?.start(useLabStore.getState().resolution)
   }, [])
   const stop = useCallback(() => { sessionRef.current?.stop() }, [])
