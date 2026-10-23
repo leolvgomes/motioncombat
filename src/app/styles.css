@@ -1,0 +1,6 @@
+@import 'tailwindcss';
+@import './styles/global.css';
+@import './styles/layout.css';
+@import './styles/camera.css';
+@import './styles/diagnostics.css';
+@import './styles/responsive.css';

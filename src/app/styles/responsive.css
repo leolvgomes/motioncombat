@@ -1,0 +1,680 @@
+/* Layout adaptations. Typography stays readable at every breakpoint. */
+
+@media (hover: hover) {
+  .rail-item:not(:disabled):hover {
+    color: #d6e2e8;
+    background: #222d35;
+  }
+
+  .rail-item.is-current:hover {
+    color: var(--orange);
+    background: #ff713d1c;
+  }
+
+  .camera-primary:not(:disabled):hover, .primary-button:hover {
+    background: #ff875a;
+  }
+
+  .camera-primary.is-stop:hover {
+    background: #ff713d22;
+  }
+
+  .fullscreen-button:hover {
+    background: #263a47;
+    color: #e1f0f5;
+  }
+
+  .toggle-row:hover {
+    color: #d5e1e7;
+  }
+
+  .guide-lighting a:hover {
+    color: var(--orange);
+  }
+}
+
+@media (min-width: 1600px) {
+  .main-content {
+    padding-top: 35px;
+  }
+
+  .workspace-intro {
+    margin-top: 30px;
+    margin-bottom: 34px;
+  }
+
+  .getting-started {
+    margin-top: 34px;
+  }
+
+  .guide-steps {
+    margin-top: 20px;
+  }
+
+  .guide-step {
+    padding: 23px 22px;
+  }
+}
+
+@media (max-width: 1250px) {
+  .global-header {
+    padding: 0 29px;
+  }
+
+  .main-content {
+    padding-left: 29px;
+    padding-right: 29px;
+  }
+
+  .laboratory-grid {
+    gap: 17px;
+    grid-template-columns: minmax(0,1fr) 285px;
+  }
+
+  .diagnostics-heading, .tracking-summary {
+    padding-left: 17px;
+    padding-right: 17px;
+  }
+
+  .confidence-block {
+    padding-left: 17px;
+    padding-right: 17px;
+  }
+
+  .diagnostic-metrics {
+    padding: 0 17px;
+  }
+
+  .landmarks-block {
+    margin: 0 17px;
+  }
+
+  .configuration-panel {
+    padding: 17px;
+  }
+
+  .camera-controls {
+    padding: 16px 17px;
+    gap: 10px;
+  }
+
+  .camera-toggles {
+    gap: 11px;
+  }
+
+  .toggle-row {
+    gap: 6px;
+  }
+
+  .camera-primary {
+    padding: 0 13px;
+  }
+
+  .guide-step {
+    padding: 17px 14px;
+    gap: 11px;
+  }
+
+  .guide-icon {
+    width: 31px;
+    height: 31px;
+  }
+
+  .workspace-footer p > span {
+    display: none;
+  }
+}
+
+@media (max-width: 1100px) {
+  .header-product {
+    display: none;
+  }
+
+  .workspace-intro h1 {
+    font-size: 29px;
+  }
+
+  .workspace-intro p {
+    max-width: 400px;
+  }
+
+  .phase-chip {
+    padding: 10px 12px;
+  }
+
+  .camera-toggles {
+    width: 100%;
+    justify-content: flex-start;
+    gap: 22px;
+    margin: 0;
+  }
+
+  .camera-controls {
+    padding-bottom: 11px;
+  }
+
+  .session-clock {
+    margin-left: auto;
+  }
+
+  .camera-privacy {
+    justify-content: flex-start;
+    padding-left: 17px;
+  }
+
+  .camera-offline p, .camera-loading p {
+    max-width: 245px;
+  }
+
+  .body-guide {
+    height: calc(100% - 70px);
+    top: 0;
+  }
+
+  .stage-tip {
+    bottom: 14px;
+  }
+
+  .stage-resolution {
+    right: 25px;
+  }
+
+  .guide-step {
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 900px) {
+  .icon-rail {
+    width: 60px;
+  }
+
+  .workspace {
+    margin-left: 60px;
+  }
+
+  .global-header {
+    height: 72px;
+    padding: 0 24px;
+  }
+
+  .brand-compact {
+    height: 71px;
+  }
+
+  .rail-navigation {
+    padding-top: 27px;
+  }
+
+  .rail-item.is-current:before {
+    left: -10px;
+  }
+
+  .main-content {
+    padding: 25px 24px 0;
+  }
+
+  .laboratory-grid {
+    grid-template-columns: minmax(0,1fr) 260px;
+    gap: 14px;
+  }
+
+  .workspace-intro {
+    margin: 24px 0;
+  }
+
+  .workspace-intro h1 {
+    font-size: 26px;
+    letter-spacing: -1px;
+  }
+
+  .phase-chip {
+    display: none;
+  }
+
+  .camera-offline p {
+    max-width: 220px;
+  }
+
+  .panel-heading {
+    padding: 15px 16px;
+    min-height: 63px;
+  }
+
+  .status-badge {
+    padding: 4px 6px;
+  }
+
+  .diagnostics-realtime {
+    display: none;
+  }
+
+  .guide-heading h2 {
+    font-size: 17px;
+  }
+
+  .camera-viewport {
+    min-height: 225px;
+  }
+
+  .metric-row > strong {
+    font-size: 18px;
+  }
+
+  .landmark-groups {
+    gap: 12px 14px;
+  }
+}
+
+@media (max-width: 850px) {
+  .laboratory-grid {
+    grid-template-columns: minmax(0,1fr);
+    gap: 18px;
+  }
+
+  .camera-viewport {
+    min-height: 0;
+  }
+
+  .camera-toggles {
+    width: auto;
+    gap: 18px;
+  }
+
+  .session-clock {
+    margin-left: 0;
+  }
+
+  .camera-controls {
+    padding: 18px 20px 13px;
+  }
+
+  .camera-privacy {
+    padding-left: 18px;
+  }
+
+  .diagnostics-stack {
+    display: grid;
+    grid-template-columns: minmax(0,1fr) minmax(0,1fr);
+    align-items: start;
+    gap: 18px;
+  }
+
+  .diagnostics-heading, .tracking-summary {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  .confidence-block {
+    padding: 17px 20px 15px;
+  }
+
+  .diagnostics-realtime {
+    display: block;
+  }
+
+  .configuration-panel {
+    padding: 20px;
+  }
+
+  .resolution-label {
+    margin-top: 22px;
+  }
+
+  .resolution-select select {
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .resolution-select > svg {
+    top: 13px;
+  }
+
+  .model-details {
+    margin-top: 21px;
+    padding-top: 18px;
+  }
+
+  .body-guide {
+    height: calc(100% - 70px);
+    top: 5px;
+  }
+
+  .camera-offline p {
+    max-width: 300px;
+  }
+
+  .stage-tip {
+    bottom: 19px;
+  }
+
+  .getting-started {
+    margin-top: 29px;
+  }
+
+  .guide-step {
+    padding: 18px 15px;
+  }
+
+  .guide-duration {
+    display: none;
+  }
+
+  .workspace-footer {
+    flex-wrap: wrap;
+    row-gap: 14px;
+  }
+}
+
+@media (max-width: 600px) {
+  .camera-stage:not(.is-running) .camera-viewport {
+    aspect-ratio: 4 / 3 !important;
+  }
+
+  .icon-rail {
+    display: none;
+  }
+
+  .workspace {
+    margin-left: 0;
+  }
+
+  .global-header {
+    height: 71px;
+    padding: 0 20px;
+  }
+
+  .global-header .brand-mark {
+    width: 25px;
+  }
+
+  .global-header .brand-mark svg {
+    width: 24px;
+  }
+
+  .global-header .brand {
+    gap: 8px;
+  }
+
+  .brand-name {
+    font-size: 15px;
+    letter-spacing: 1.1px;
+  }
+
+  .brand-name small {
+    letter-spacing: 2.5px;
+  }
+
+  .environment-status {
+    gap: 6px;
+  }
+
+  .environment-status > svg, .environment-status > span:last-child, .environment-separator {
+    display: none;
+  }
+
+  .main-content {
+    padding: 23px 20px 0;
+  }
+
+  .breadcrumbs {
+    gap: 10px;
+  }
+
+  .workspace-intro {
+    margin: 23px 0 24px;
+  }
+
+  .workspace-intro h1 {
+    font-size: 28px;
+    max-width: 350px;
+    line-height: 1.16;
+    letter-spacing: -1.1px;
+    margin-top: 11px;
+  }
+
+  .workspace-intro p {
+    max-width: 300px;
+    line-height: 1.7;
+  }
+
+  .section-eyebrow {
+    letter-spacing: 1.5px;
+  }
+
+  .panel-heading {
+    min-height: 65px;
+    padding: 15px;
+  }
+
+  .stage-corner {
+    width: 15px;
+    height: 15px;
+  }
+
+  .stage-corner.tl {
+    left: 13px;
+    top: 13px;
+  }
+
+  .stage-corner.tr {
+    right: 13px;
+    top: 13px;
+  }
+
+  .stage-corner.bl {
+    left: 13px;
+    bottom: 13px;
+  }
+
+  .stage-corner.br {
+    right: 13px;
+    bottom: 13px;
+  }
+
+  .stage-label {
+    top: 17px;
+    left: 24px;
+  }
+
+  .stage-ruler {
+    left: 14px;
+    font-size: 5px;
+    height: 110px;
+  }
+
+  .fullscreen-button {
+    top: 17px;
+    right: 18px;
+  }
+
+  .stage-resolution {
+    right: 24px;
+  }
+
+  .stage-tip {
+    bottom: 16px;
+    max-width: calc(100% - 50px);
+  }
+
+  .camera-offline p {
+    max-width: 240px;
+  }
+
+  .body-guide {
+    max-width: 85%;
+    height: calc(100% - 74px);
+    top: 8px;
+  }
+
+  .camera-controls {
+    padding: 17px 15px 12px;
+    gap: 13px;
+  }
+
+  .camera-primary {
+    min-height: 42px;
+    padding: 0 16px;
+  }
+
+  .session-clock {
+    margin-left: auto;
+  }
+
+  .camera-toggles {
+    width: 100%;
+    margin: 0;
+    justify-content: space-between;
+    gap: 15px;
+    padding-top: 3px;
+    column-gap: 16px;
+    row-gap: 4px;
+  }
+
+  .camera-privacy {
+    line-height: 1.7;
+    max-width: 300px;
+    margin: 0 auto;
+    padding: 0 15px 16px;
+  }
+
+  .camera-error {
+    margin-left: 14px;
+    margin-right: 14px;
+  }
+
+  .diagnostics-stack {
+    grid-template-columns: minmax(0,1fr);
+    gap: 15px;
+  }
+
+  .diagnostics-heading {
+    padding-top: 20px;
+  }
+
+  .tracking-summary {
+    padding-top: 19px;
+  }
+
+  .confidence-block {
+    padding-top: 17px;
+  }
+
+  .confidence-meter {
+    height: 15px;
+    gap: 4px;
+  }
+
+  .metric-row {
+    min-height: 63px;
+  }
+
+  .metric-row > strong {
+    font-size: 23px;
+  }
+
+  .landmark-groups {
+    gap: 16px 28px;
+  }
+
+  .landmark-dot {
+    width: 6px;
+    height: 6px;
+  }
+
+  .resolution-label {
+    margin-top: 20px;
+  }
+
+  .local-chip {
+    padding: 4px 5px;
+  }
+
+  .model-details {
+    margin-top: 18px;
+    padding-top: 17px;
+  }
+
+  .getting-started {
+    margin-top: 28px;
+  }
+
+  .guide-heading h2 {
+    font-size: 19px;
+  }
+
+  .guide-steps {
+    grid-template-columns: minmax(0,1fr);
+    gap: 10px;
+  }
+
+  .guide-step {
+    flex-direction: row;
+    gap: 16px;
+    padding: 19px 17px;
+    min-height: 104px;
+  }
+
+  .guide-lighting {
+    align-items: flex-start;
+    margin-top: 15px;
+  }
+
+  .guide-lighting a {
+    display: none;
+  }
+
+  .lighting-symbol {
+    line-height: 1.4;
+  }
+
+  .workspace-footer {
+    margin-top: 24px;
+    padding: 20px 0;
+    gap: 17px;
+    align-items: flex-start;
+  }
+
+  .workspace-footer p {
+    align-items: flex-start;
+    max-width: 320px;
+    gap: 5px;
+  }
+
+  .workspace-footer p > svg {
+    margin-top: 0;
+  }
+
+  .workspace-footer p > span {
+    display: block;
+    flex-basis: 100%;
+    padding-left: 19px;
+    margin-left: 0;
+  }
+
+  .phase-roadmap {
+    width: 100%;
+    gap: 12px;
+    padding-left: 18px;
+  }
+
+  .skip-link {
+    left: 15px;
+  }
+
+  .offline-icon {
+    width: 32px;
+    height: 32px;
+    margin-bottom: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *:before, *:after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition: none !important;
+  }
+}

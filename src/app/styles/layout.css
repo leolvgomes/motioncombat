@@ -1,0 +1,512 @@
+/* Application shell, navigation, setup guide and page layout. */
+
+.app-shell {
+  min-height: 100vh;
+}
+
+.icon-rail {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 20;
+  width: 74px;
+  background: #0f1417;
+  border-right: 1px solid #232c31;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.brand-mark {
+  width: 34px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+}
+
+.brand-mark svg {
+  width: 28px;
+  height: 31px;
+  fill: var(--orange);
+}
+
+.brand-name {
+  position: relative;
+  font-size: 17px;
+  line-height: 1;
+  letter-spacing: 1.35px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.brand-name > span {
+  color: var(--orange);
+  margin-left: 3px;
+}
+
+.brand-name small {
+  display: block;
+  color: #67767f;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 2.7px;
+  margin-top: 6px;
+}
+
+.brand-compact {
+  height: 79px;
+  justify-content: center;
+}
+
+.brand-compact .brand-name {
+  display: none;
+}
+
+.brand-compact .brand-mark {
+  width: 40px;
+}
+
+.brand-compact .brand-mark svg {
+  width: 30px;
+  height: 33px;
+}
+
+.rail-navigation {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding-top: 35px;
+}
+
+.rail-item {
+  width: 42px;
+  height: 42px;
+  position: relative;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: none;
+  display: grid;
+  place-items: center;
+  color: #57656e;
+  transition: color .18s,background .18s,border-color .18s;
+}
+
+.rail-item.is-current {
+  color: var(--orange);
+  border-color: #ff713d35;
+  background: #ff713d10;
+}
+
+.rail-item.is-current:before {
+  content: '';
+  position: absolute;
+  width: 2px;
+  height: 19px;
+  left: -17px;
+  top: 11px;
+  background: var(--orange);
+  border-radius: 0 3px 3px 0;
+}
+
+.rail-item:disabled {
+  color: #3b474e;
+}
+
+.rail-lock {
+  position: absolute;
+  bottom: 5px;
+  right: 4px;
+  color: #4e5b63;
+}
+
+.rail-help {
+  margin-top: auto;
+  margin-bottom: 12px;
+}
+
+.rail-version {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: #41515b;
+  letter-spacing: .5px;
+  margin-bottom: 20px;
+}
+
+.workspace {
+  margin-left: 74px;
+}
+
+.global-header {
+  height: 80px;
+  padding: 0 42px;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #232c31;
+  background: #0e1215;
+  gap: 28px;
+}
+
+.header-product {
+  display: flex;
+  gap: 13px;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1.6px;
+  color: #8a969d;
+}
+
+.header-divider {
+  width: 1px;
+  height: 25px;
+  background: #2b3339;
+  margin-right: 5px;
+}
+
+.version-tag {
+  color: #6d7c84;
+  background: #1b2227;
+  padding: 4px 6px;
+  border-radius: 3px;
+  font-size: 9px;
+  letter-spacing: .1px;
+}
+
+.environment-status {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #7b898f;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .8px;
+}
+
+.environment-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #7dd7ae;
+  box-shadow: 0 0 0 3px #7dd7ae0a;
+}
+
+.environment-separator {
+  width: 1px;
+  height: 12px;
+  background: #2b3439;
+  margin: 0 9px;
+}
+
+.environment-status > svg {
+  color: #5c6d78;
+}
+
+.main-content {
+  max-width: 1504px;
+  margin: 0 auto;
+  padding: 28px 42px 0;
+}
+
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--mono);
+  color: #52626c;
+  font-size: 9px;
+  letter-spacing: 1.5px;
+}
+
+.breadcrumbs span:last-child {
+  color: #99a4aa;
+}
+
+.breadcrumbs svg {
+  color: #46545c;
+}
+
+.workspace-intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin: 26px 0 29px;
+}
+
+.section-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 1.65px;
+  line-height: 1.3;
+  color: var(--orange);
+}
+
+.section-eyebrow > span {
+  width: 4px;
+  height: 4px;
+  background: var(--orange);
+  border-radius: 1px;
+}
+
+.workspace-intro h1 {
+  font-size: clamp(26px,2.55vw,38px);
+  font-weight: 600;
+  letter-spacing: -1.4px;
+  line-height: 1.2;
+  margin: 10px 0 10px;
+}
+
+.title-period {
+  color: var(--orange);
+}
+
+.workspace-intro p {
+  color: #87959d;
+  letter-spacing: .05px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.phase-chip {
+  display: flex;
+  gap: 11px;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 12px 16px;
+  border: 1px solid #2a3339;
+  border-radius: 5px;
+  background: linear-gradient(120deg,#17202775,#141a1e55);
+}
+
+.phase-number {
+  font-family: var(--mono);
+  font-size: 20px;
+  color: var(--orange);
+  padding-right: 12px;
+  border-right: 1px solid #303a41;
+}
+
+.phase-chip > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.phase-chip > div > span {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 1.4px;
+  color: #72848d;
+}
+
+.phase-chip strong {
+  font-size: 11px;
+  font-weight: 500;
+  color: #b1bdc4;
+}
+
+.laboratory-grid {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 310px;
+  gap: 22px;
+  align-items: start;
+}
+
+.getting-started {
+  margin-top: 30px;
+  scroll-margin-top: 24px;
+}
+
+.guide-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.guide-heading .section-eyebrow {
+  font-size: 9px;
+  color: #70818b;
+  letter-spacing: 1.7px;
+}
+
+.guide-heading h2 {
+  font-size: 18px;
+  letter-spacing: -.35px;
+  font-weight: 500;
+  margin: 7px 0 0;
+}
+
+.guide-duration {
+  color: #5c737f;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.guide-steps {
+  display: grid;
+  grid-template-columns: repeat(3,minmax(0,1fr));
+  gap: 14px;
+  margin-top: 17px;
+}
+
+.guide-step {
+  display: flex;
+  gap: 14px;
+  border: 1px solid #273138;
+  border-radius: 5px;
+  background: linear-gradient(110deg,#141b20,#101619);
+  padding: 20px 18px;
+  min-height: 118px;
+}
+
+.guide-icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border: 1px solid #344047;
+  border-radius: 5px;
+  color: #a1b1b9;
+  background: #1d282e55;
+  margin-top: 2px;
+}
+
+.step-number {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 1.35px;
+  color: #71818a;
+}
+
+.guide-step h3 {
+  font-weight: 500;
+  line-height: 1.3;
+  margin: 6px 0;
+  font-size: 13px;
+}
+
+.guide-step p {
+  color: #758993;
+  margin: 0;
+  font-size: 12px;
+  max-width: none;
+  line-height: 1.6;
+}
+
+.guide-lighting {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #627a87;
+  margin: 14px 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.lighting-symbol {
+  color: #8da4af;
+  font-size: 14px;
+}
+
+.guide-lighting a {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #a6b8c2;
+  white-space: nowrap;
+}
+
+.workspace-footer {
+  border-top: 1px solid #263139;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  margin-top: 27px;
+  padding: 20px 0 24px;
+}
+
+.workspace-footer p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #869aa6;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.6;
+  flex-wrap: wrap;
+}
+
+.workspace-footer p > svg {
+  color: #667f8e;
+}
+
+.workspace-footer p > span {
+  color: #526e7e;
+  margin-left: 4px;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.phase-roadmap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: #3f5969;
+  white-space: nowrap;
+}
+
+.phase-roadmap > span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.phase-roadmap > span > span {
+  font-family: 'Segoe UI',Arial,sans-serif;
+  font-size: 9px;
+}
+
+.phase-roadmap > .is-active {
+  color: #abbbbF;
+}
+
+.roadmap-dot {
+  display: block;
+  width: 4px;
+  height: 4px;
+  background: var(--orange);
+  border-radius: 50%;
+  margin-right: 2px;
+}
+
+.phase-roadmap > svg {
+  color: #304654;
+}
+
+.guide-step > div:last-child {
+  min-width: 0;
+}
+
+.workspace-intro > div:first-child {
+  min-width: 0;
+}

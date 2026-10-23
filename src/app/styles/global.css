@@ -1,0 +1,135 @@
+/* Global defaults, focus treatment and shared error states. */
+
+:root {
+  font-family: 'Segoe UI',Arial,sans-serif;
+  color: #f0f2f3;
+  background: #0b0e10;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-weight: 400;
+  color-scheme: dark;
+  --panel: #11161a;
+  --border: #273037;
+  --orange: #ff713d;
+  --cyan: #76ddd4;
+  --mono: 'Cascadia Code','SFMono-Regular',Consolas,monospace
+;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  scroll-behavior: smooth;
+  scroll-padding-top: 28px;
+}
+
+body {
+  margin: 0;
+}
+
+button, a, input, select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button, select {
+  font: inherit;
+}
+
+button, a, select {
+  touch-action: manipulation;
+}
+
+button {
+  cursor: pointer;
+  color: inherit;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button:focus-visible, a:focus-visible, select:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 5px;
+}
+
+svg {
+  flex-shrink: 0;
+}
+
+::selection {
+  background: #ff713d40;
+  color: #fff;
+}
+
+.sr-only {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link {
+  position: fixed;
+  top: 12px;
+  left: 90px;
+  z-index: 100;
+  transform: translateY(-150%);
+  padding: 12px 18px;
+  background: var(--orange);
+  color: #111;
+  font-weight: 700;
+  border-radius: 4px;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+.fatal-error {
+  max-width: 600px;
+  margin: 15vh auto;
+  padding: 30px;
+}
+
+.fatal-error h1 {
+  font-size: 24px;
+  font-weight: 550;
+}
+
+.fatal-error p {
+  color: #8b9ca6;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.fatal-error .primary-button {
+  margin-top: 12px;
+}
+
+.spinning {
+  animation: spin 1.3s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
