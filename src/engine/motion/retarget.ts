@@ -1,4 +1,4 @@
-import { Matrix4, Quaternion, Vector3 } from 'three'
+import { Quaternion, Vector3 } from 'three'
 import type { Landmark, ProcessedPose } from '../../types/motion'
 import type { QuaternionTuple, RigPose } from '../../types/robot'
 import { LANDMARK_VISIBILITY_THRESHOLD } from './pose-processor'
@@ -14,14 +14,21 @@ interface ArmRotation {
   readonly wrist: QuaternionTuple
 }
 
+interface ArmDirections {
+  readonly upper: Vector3
+  readonly forearm: Vector3
+}
+
 const DOWN = new Vector3(0, -1, 0)
 const Z_AXIS = new Vector3(0, 0, 1)
 const DEFAULT_ASPECT_RATIO = 16 / 9
 const MAX_TORSO_ROLL = 0.35
-const MAX_DEPTH_RATIO = 0.3
 const MAX_ELBOW_BEND = 150 * Math.PI / 180
 const MAX_INWARD_COMPONENT = 0.85
 const MIN_SEGMENT_LENGTH = 0.00001
+const WORLD_VISIBILITY_THRESHOLD = 0.65
+const MIN_WORLD_BONE_LENGTH = 0.06
+const MAX_WORLD_BONE_LENGTH = 0.85
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value))
@@ -38,7 +45,7 @@ function identity(): QuaternionTuple {
 function finitePoint(point: Landmark | undefined, threshold: number): boolean {
   return point !== undefined
     && Number.isFinite(point.x) && Number.isFinite(point.y) && Number.isFinite(point.z)
-    && Number.isFinite(point.visibility) && point.visibility >= threshold
+    && Number.isFinite(point.visibility) && point.visibility >= threshold && point.visibility <= 1
 }
 
 function imagePoint(point: Landmark | undefined): boolean {
@@ -46,29 +53,67 @@ function imagePoint(point: Landmark | undefined): boolean {
     && point !== undefined && point.x >= 0 && point.x <= 1 && point.y >= 0 && point.y <= 1
 }
 
-/** World depth can bend a limb out of the image plane by at most atan(0.3). */
-function depthRatio(start: Landmark | undefined, end: Landmark | undefined): number {
-  if (!finitePoint(start, 0.65) || !finitePoint(end, 0.65) || !start || !end) return 0
-  const dx = end.x - start.x
-  const dy = end.y - start.y
-  const dz = start.z - end.z // MediaPipe camera -Z becomes the robot's forward +Z.
-  const length = Math.hypot(dx, dy, dz)
-  if (!Number.isFinite(length) || length < MIN_SEGMENT_LENGTH) return 0
-  return clamp(dz / length * 0.5, -MAX_DEPTH_RATIO, MAX_DEPTH_RATIO)
+function worldDirection(start: Landmark, end: Landmark, xSign: number): Vector3 {
+  // World landmarks are metric, with the hip midpoint as origin. Camera +Y is
+  // down and camera -Z points toward the webcam, hence both sign inversions.
+  return new Vector3((end.x - start.x) * xSign, start.y - end.y, start.z - end.z)
 }
 
-function imageDirection(
-  start: Landmark,
-  end: Landmark,
-  worldStart: Landmark | undefined,
-  worldEnd: Landmark | undefined,
-  aspect: number,
+function projectionConsistent(
+  image: Vector3,
+  world: Vector3,
+  worldLength: number,
+  imageScale: number,
+): boolean {
+  const imageLength = Math.hypot(image.x, image.y)
+  const worldProjection = Math.hypot(world.x, world.y)
+  // A genuinely foreshortened arm has almost no useful projected direction.
+  // Do not require a nonzero 2D segment to accept a reliable 3D extension.
+  if (worldProjection / worldLength < 0.15 || imageLength < Math.max(MIN_SEGMENT_LENGTH, imageScale * 0.04)) return true
+  const cosine = (image.x * world.x + image.y * world.y) / (imageLength * worldProjection)
+  return cosine >= 0.35
+}
+
+function worldArmDirections(
+  pose: ProcessedPose,
+  indices: readonly [number, number, number],
+  imageUpper: Vector3,
+  imageForearm: Vector3,
+  imageScale: number,
   xSign: number,
-): Vector3 {
-  const x = (end.x - start.x) * aspect * xSign
-  const y = start.y - end.y
-  const projectedLength = Math.hypot(x, y)
-  return new Vector3(x, y, projectedLength * depthRatio(worldStart, worldEnd)).normalize()
+): ArmDirections | null {
+  const [shoulderIndex, elbowIndex, wristIndex] = indices
+  const shoulder = pose.worldLandmarks[shoulderIndex]
+  const elbow = pose.worldLandmarks[elbowIndex]
+  const wrist = pose.worldLandmarks[wristIndex]
+  if (!finitePoint(shoulder, WORLD_VISIBILITY_THRESHOLD)
+    || !finitePoint(elbow, WORLD_VISIBILITY_THRESHOLD)
+    || !finitePoint(wrist, WORLD_VISIBILITY_THRESHOLD)) return null
+
+  const upper = worldDirection(shoulder, elbow, xSign)
+  const forearm = worldDirection(elbow, wrist, xSign)
+  const upperLength = upper.length()
+  const forearmLength = forearm.length()
+  if (!Number.isFinite(upperLength) || !Number.isFinite(forearmLength)
+    || Math.min(upperLength, forearmLength) < MIN_WORLD_BONE_LENGTH
+    || Math.max(upperLength, forearmLength) > MAX_WORLD_BONE_LENGTH) return null
+
+  // Broad metric limits catch exploded estimates; ratios reject distorted arms
+  // without tying the result to pixels or requiring a particular camera distance.
+  const ratio = forearmLength / upperLength
+  if (ratio < 0.45 || ratio > 1.65) return null
+  const leftShoulder = pose.worldLandmarks[11]
+  const rightShoulder = pose.worldLandmarks[12]
+  if (finitePoint(leftShoulder, WORLD_VISIBILITY_THRESHOLD) && finitePoint(rightShoulder, WORLD_VISIBILITY_THRESHOLD)) {
+    const shoulderSpan = worldDirection(leftShoulder, rightShoulder, 1).length()
+    if (!Number.isFinite(shoulderSpan) || shoulderSpan < 0.08 || shoulderSpan > 0.95
+      || Math.min(upperLength, forearmLength) / shoulderSpan < 0.2
+      || Math.max(upperLength, forearmLength) / shoulderSpan > 2) return null
+  }
+  if (!projectionConsistent(imageUpper, upper, upperLength, imageScale)
+    || !projectionConsistent(imageForearm, forearm, forearmLength, imageScale)) return null
+
+  return { upper: upper.normalize(), forearm: forearm.normalize() }
 }
 
 function limitUpperArm(direction: Vector3, side: 1 | -1): Vector3 {
@@ -98,20 +143,19 @@ function limitElbow(upper: Vector3, forearm: Vector3): Vector3 {
     .addScaledVector(tangent, Math.sin(MAX_ELBOW_BEND)).normalize()
 }
 
-function shoulderOrientation(direction: Vector3): Quaternion {
-  // Constrain roll with a stable forward reference instead of a minimal swing.
-  // DOWN -> UP is then continuous; bounded depth keeps this reference away from
-  // its own singularity (an arm pointing exactly along the model's Z axis).
-  const y = direction.clone().negate()
-  const x = new Vector3().crossVectors(y, Z_AXIS).normalize()
-  const z = new Vector3().crossVectors(x, y).normalize()
-  return new Quaternion().setFromRotationMatrix(new Matrix4().makeBasis(x, y, z)).normalize()
+function shoulderOrientation(direction: Vector3, side: 1 | -1): Quaternion {
+  // Swing from the body's outward axis, then apply the fixed -Y bone offset.
+  // Its only opposite-vector pole lies beyond the cross-body shoulder limit.
+  // Both overhead and fully forward/backward directions remain continuous.
+  const outward = new Vector3(side, 0, 0)
+  const boneOffset = new Quaternion().setFromUnitVectors(DOWN, outward)
+  return new Quaternion().setFromUnitVectors(outward, direction).multiply(boneOffset).normalize()
 }
 
 function solveArm(upper: Vector3, forearm: Vector3, torso: Quaternion, side: 1 | -1): ArmRotation {
   const inverseTorso = torso.clone().invert()
   const localUpper = limitUpperArm(upper.clone().applyQuaternion(inverseTorso).normalize(), side)
-  const shoulder = shoulderOrientation(localUpper)
+  const shoulder = shoulderOrientation(localUpper, side)
   const constrainedUpper = localUpper.clone().applyQuaternion(torso)
   const localForearm = limitElbow(constrainedUpper, forearm.clone())
     .applyQuaternion(inverseTorso)
@@ -186,18 +230,23 @@ function trackedArm(
   const wrist = pose.landmarks[wristIndex]
   if (!imagePoint(shoulder) || !imagePoint(elbow) || !imagePoint(wrist)) return rest
 
-  const upperLength = Math.hypot((elbow.x - shoulder.x) * aspect, shoulder.y - elbow.y)
-  const forearmLength = Math.hypot((wrist.x - elbow.x) * aspect, elbow.y - wrist.y)
+  const imageUpper = new Vector3((elbow.x - shoulder.x) * aspect * xSign, shoulder.y - elbow.y, 0)
+  const imageForearm = new Vector3((wrist.x - elbow.x) * aspect * xSign, elbow.y - wrist.y, 0)
+  const leftShoulder = pose.landmarks[11]
+  const rightShoulder = pose.landmarks[12]
+  const imageScale = imagePoint(leftShoulder) && imagePoint(rightShoulder)
+    ? Math.hypot((leftShoulder.x - rightShoulder.x) * aspect, leftShoulder.y - rightShoulder.y)
+    : Math.max(imageUpper.length(), imageForearm.length())
+  const world = worldArmDirections(pose, indices, imageUpper, imageForearm, imageScale, xSign)
+  if (world) return solveArm(world.upper, world.forearm, torso, side)
+
+  const upperLength = imageUpper.length()
+  const forearmLength = imageForearm.length()
   if (Math.min(upperLength, forearmLength) < Math.max(MIN_SEGMENT_LENGTH, Math.max(upperLength, forearmLength) * 0.04)) {
     return rest
   }
 
-  return solveArm(
-    imageDirection(shoulder, elbow, pose.worldLandmarks[shoulderIndex], pose.worldLandmarks[elbowIndex], aspect, xSign),
-    imageDirection(elbow, wrist, pose.worldLandmarks[elbowIndex], pose.worldLandmarks[wristIndex], aspect, xSign),
-    torso,
-    side,
-  )
+  return solveArm(imageUpper.normalize(), imageForearm.normalize(), torso, side)
 }
 
 /**

@@ -90,4 +90,21 @@ describe('RigController', () => {
     controller.step(input(), Number.NaN)
     for (const joint of RIG_JOINTS) expect(controller.rotations[joint].toArray().every(Number.isFinite)).toBe(true)
   })
+
+  it('keeps a visible arm responsive when the opposite chain is partially hidden', () => {
+    const captured = capturedPose()
+    const partial = { ...captured, status: 'partial' as const, landmarks: captured.landmarks.map((point, index) => index === 14 || index === 16 ? { ...point, visibility: 0 } : point) }
+    const completeController = new RigController()
+    const partialController = new RigController()
+    const completeInput = input({ pose: captured, mirrored: false })
+    const partialInput = input({ pose: partial, mirrored: false })
+    for (let i = 0; i < 10; i++) {
+      completeController.step(completeInput, 1 / 60)
+      partialController.step(partialInput, 1 / 60)
+    }
+    expect(partialController.sourceStatus).toBe('partial')
+    expect(partialController.rotations.leftShoulder.angleTo(completeController.rotations.leftShoulder)).toBeLessThan(0.000001)
+    expect(partialController.rotations.leftElbow.angleTo(completeController.rotations.leftElbow)).toBeLessThan(0.000001)
+    expect(partialController.rotations.rightShoulder.angleTo(new Quaternion().fromArray(createRestPose().rightShoulder))).toBeLessThan(0.000001)
+  })
 })

@@ -1,6 +1,6 @@
 # STEEL SYNC — Motion Combat
 
-Laboratório de movimento para um futuro jogo web de combate robótico controlado pelo corpo. As **fases 1 e 2** implementam webcam, rastreamento corporal e um robô 3D procedural que acompanha braços e tronco. Também há uma demonstração do rig sem câmera. Calibração, reconhecimento de golpes e combate ainda não estão implementados.
+Laboratório de movimento para um futuro jogo web de combate robótico controlado pelo corpo. As **fases 1 a 3** implementam webcam, rastreamento corporal, robô 3D procedural, calibração e reconhecimento inicial de socos retos, guarda e esquivas. Há demonstração do rig sem câmera. Animações próprias de ataque, arena e combate ainda não estão implementados.
 
 ## Stack
 
@@ -14,7 +14,7 @@ Laboratório de movimento para um futuro jogo web de combate robótico controlad
 | Drei 10 | Grade de referência da plataforma de teste |
 | Zustand 5 | Configurações, estado da sessão e diagnóstico reduzido |
 | Lucide React | Ícones vetoriais locais |
-| Vitest 5 | Filtros, câmera, conversão de pose, projeção e controle do rig |
+| Vitest 5 | Filtros, câmera, rig, calibração, velocidades, gestos e integração |
 
 Não há física, backend, upload, gravação de vídeo, analytics ou persistência de landmarks. A plataforma de teste 3D não implementa arena ou combate.
 
@@ -25,7 +25,7 @@ Não há física, backend, upload, gravação de vídeo, analytics ou persistên
 - Acesso à internet na instalação para o registro npm e o modelo oficial do Google. Depois da preparação, todos os recursos do rastreamento são servidos localmente.
 - Câmera exige uma origem segura: `localhost`, `127.0.0.1` ou HTTPS. Um endereço HTTP na rede local geralmente não permite a webcam.
 
-Ambiente de build/testes verificado: Windows, Node 24.14.0 e npm 11.9.0. O usuário confirmou o funcionamento do rastreamento dos braços na fase 1. O espelhamento 3D e seu desempenho precisam de validação visual no hardware/navegador do jogador.
+Ambiente de build/testes verificado: Windows, Node 24.14.0 e npm 11.9.0. O usuário confirmou as fases 1 e 2 e forneceu uma captura do robô, identificando dificuldade em socos frontais. A fase 3 corrige a restrição de profundidade no solver e acrescenta gestos; sua resposta real precisa de validação com webcam no hardware do jogador.
 
 ## Instalação e execução
 
@@ -58,11 +58,14 @@ Execute `setup:tracking` **antes do build** para incluir o modelo e WASM em `dis
 3. Clique **Iniciar câmera** e permita o acesso no navegador. Nenhum áudio é solicitado.
 4. Aguarde o carregamento do motor e modelo. É possível cancelar a conexão em qualquer etapa.
 5. Fique de frente para a webcam, com ombros, cotovelos e punhos visíveis. Comece aproximadamente a 1,5–2 m, ajustando a distância ao campo de visão da câmera. Quadris podem estar junto à borda inferior; a câmera não precisa ver as pernas.
-6. Mova braços e tronco devagar. Compare vídeo, pontos e articulações do robô. Comece com movimentos laterais e flexões dos cotovelos; socos ainda não são interpretados como ataques.
+6. Mova braços e tronco devagar. Compare vídeo, pontos e articulações do robô. Na vista **Perspectiva**, teste uma extensão à frente para observar a profundidade. Isso ainda é espelhamento; o robô não executa uma animação própria de ataque.
 7. Teste **Exibir esqueleto**, **Espelhar vídeo**, **Guia de enquadramento** e tela cheia (quando suportada). Vídeo, overlay e mapeamento do robô respeitam o mesmo modo de espelhamento. Com espelhamento ligado, o braço à esquerda da imagem move o braço à esquerda da vista frontal do robô.
 8. Clique **Desligar câmera**. O indicador físico de uso da webcam deve apagar; imagem, pose e métricas são descartadas.
 9. Selecione **Demonstração** no painel do robô. O rig levanta os braços, acena e inclina o tronco em uma sequência de 16 segundos. Esse modo desliga qualquer sessão de webcam e é identificado como movimento programado. **Pausar/Continuar** controla a demonstração.
 10. Alterne **Frontal/Perspectiva** e experimente a qualidade **Leve** (DPR 1, sem sombras), ou **Equilibrada** (DPR até 1,5, sombras limitadas). O enquadramento se adapta à proporção do painel. Para voltar ao corpo, escolha **Seus movimentos** e inicie a câmera; o botão da câmera também seleciona essa fonte.
+11. Com a câmera ativa, no painel **Do movimento ao gesto**, clique em **Calibrar movimentos**. Relaxe os ombros e mantenha os punhos visíveis à frente da cintura por aproximadamente 1,5 s. Depois mantenha os dois punhos próximos ao rosto, com cotovelos flexionados, por aproximadamente 1,2 s. Perda de visibilidade ou movimentos excessivos reiniciam o tempo da etapa. É possível cancelar ou recalibrar.
+12. Após a calibração, assuma a guarda, estenda um punho à frente de cada vez e retorne à guarda entre os socos. Observe o último gesto, as extensões e a confiança da profundidade **de cada braço**. Incline o tronco lateralmente para testar esquivas. Os nomes esquerdo/direito referem-se ao lado anatômico do jogador, independentemente do espelhamento da tela.
+13. Se aparecer **Extensão 2D · soco indisponível**, o braço não tem profundidade suficientemente confiável. Guarda e inclinações podem continuar sendo analisadas, mas o sistema não inventa um soco frontal a partir de uma trajetória apenas lateral. Reenquadre-se e mantenha punhos/cotovelos visíveis. Toda nova sessão de câmera exige nova calibração.
 
 Também revise manualmente: negar a permissão; desconectar a câmera; fechar/ocultar a aba; cancelar durante o carregamento; iniciar novamente; sair do quadro e retornar; ocultar um braço; usar pouca luz; reduzir a largura da janela para 375 px. A câmera para ao ocultar a página e exige novo clique ao voltar, por privacidade e economia de recursos.
 
@@ -81,9 +84,14 @@ Se a permissão foi negada, libere-a nas configurações do site no navegador. S
 - Navegação por teclado, foco visível, link de salto, rótulos acessíveis, mensagens de status/erro e respeito a movimento reduzido.
 - Robô metálico original, com hierarquia de tronco, ombros, cotovelos, punhos, cabeça e pernas. Seis geometrias e oito materiais compartilhados entre aproximadamente 92 meshes; sem GLB, texturas ou fontes externas.
 - Conversão de landmarks em quaternions locais, compensando a rotação do tronco, proporção do vídeo e espelhamento. Limites conservadores reduzem poses extremas e profundidade instável.
+- Vetores 3D mundiais completos para braços confiáveis, inclusive quando ombro, cotovelo e punho se sobrepõem na projeção 2D; alternativa planar para dados 3D rejeitados. A antiga limitação de profundidade foi removida.
 - Interpolação de rotações no loop 3D, retorno gradual ao repouso após perda de confiança e pernas com movimento de base independente da câmera.
 - Demonstração sem landmarks fictícios, troca explícita de fonte, pausa, duas vistas e duas opções de qualidade. FPS da cena é medido separadamente do loop da câmera.
 - Erro de renderização isolado do painel da câmera, fallback para WebGL indisponível e reabertura após perda de contexto gráfico.
+- Calibração guiada em duas etapas, com validação de confiança, proporções, estabilidade e postura; nenhuma detecção de gesto antes de concluir as duas etapas.
+- Posições relativas ao tronco, velocidades normalizadas por largura dos ombros, ângulo do cotovelo, extensão do braço e disponibilidade de profundidade por cadeia.
+- Reconhecimento heurístico de socos retos esquerdo/direito, guarda e inclinação lateral. Retração, velocidade, extensão, janela temporal, dois frames coerentes, cooldown e histerese limitam falsos positivos e repetição.
+- Histórico limitado aos últimos seis gestos, sem persistência. Demo, calibração e câmera inativa não geram eventos de combate.
 
 ## Arquitetura
 
@@ -96,7 +104,9 @@ src/
 │   ├── camera/                     # Acesso à webcam e painel
 │   ├── motion-tracking/            # MediaPipe, sessão, overlay e stream de pose
 │   └── robot/                      # Modelo, recursos, enquadramento, cena e painel
-├── engine/motion/                 # Filtros, retargeting, controlador do rig e testes
+├── engine/
+│   ├── motion/                    # Filtros, retargeting, calibração e velocidades
+│   └── gestures/                  # Reconhecimento geométrico e temporal, sem animação
 ├── stores/                        # Configurações da câmera/robô e diagnóstico reduzido
 └── types/                         # Contratos de landmarks e rotações do rig
 public/mediapipe/                   # Recursos gerados, ignorados pelo Git
@@ -105,6 +115,8 @@ public/mediapipe/                   # Recursos gerados, ignorados pelo Git
 `PoseBackend` isola o MediaPipe. `TrackingSession` controla câmera, modelo e agendadores. `PoseProcessor` não conhece React, câmera ou o motor de inferência. `pose-stream` disponibiliza apenas a última amostra, sem uma fila nem assinaturas React por frame.
 
 `retargetPose` converte essa amostra em `RigPose`; `RigController` seleciona a fonte, verifica sua idade e interpola quaternions reutilizados. O renderizador aplica as rotações diretamente aos grupos do `RobotRig`. Os segmentos dos braços apontam para -Y local; o robô olha para +Z e sua esquerda anatômica fica em +X. Ombros herdam tronco, cotovelos herdam ombros e punhos herdam cotovelos. O adaptador de grupos permite substituir o modelo por um GLB com esqueleto no futuro, ainda sem implementar lógica de combate.
+
+`MotionCalibrator` e `MotionFeatureExtractor` são módulos puros que recebem poses tipadas. `GestureEngine` recebe somente características normalizadas e contexto da calibração. `combat-motion-runtime` conecta esses módulos às amostras reais e publica snapshots para a interface; eventos semânticos são publicados imediatamente, enquanto métricas usam a cadência reduzida do diagnóstico. Nenhum gesto controla animação de ataque nesta fase.
 
 ### Frequências e processamento
 
@@ -115,41 +127,48 @@ public/mediapipe/                   # Recursos gerados, ignorados pelo Git
 - Depois de **400 ms** de ausência, filtros antigos são reinicializados. Landmarks sem confiança não desenham conexões. Não há pose antiga mantida como se fosse uma detecção atual.
 - `renderFps` mede a frequência do loop `requestAnimationFrame`, não FPS de uma cena 3D ou taxa da webcam. `inferenceMs` inclui detecção e processamento dos landmarks; não mede latência ponta a ponta.
 - `sceneFps` mede os frames do renderizador 3D e é publicado a cada 500 ms. O controlador calcula novos alvos na frequência de captura; a demonstração é amostrada em até 24 Hz. O loop 3D aplica as rotações com referências e quaternions reutilizados, sem estado React por frame.
-- O tracking é projetado principalmente no plano da câmera, corrigido pela proporção do vídeo. A profundidade mundial só acrescenta uma contribuição limitada; o tronco inclina até aproximadamente 20° e os cotovelos flexionam até 150°. Rotação fina dos punhos e giro axial dos ombros não são inferidos.
-- A interpolação usa constante temporal de 55 ms para tracking válido e 200 ms no repouso/perda/visibilidade parcial. Dados com mais de 400 ms são ignorados. São filtros de acompanhamento, não uma máquina de estados de golpes.
+- O rig prioriza direções XYZ completas das coordenadas mundiais quando confiança e geometria são plausíveis. Proporções, comprimentos amplos e coerência da projeção rejeitam estimativas aberrantes. Se os dados forem rejeitados, a alternativa usa XY corrigido pela proporção do vídeo. O tronco inclina até aproximadamente 20° e os cotovelos flexionam até 150°. Rotação fina dos punhos não é inferida.
+- A interpolação usa constante temporal de 55 ms para cadeias visíveis e 200 ms no repouso/perda daquela cadeia. A perda de um braço não torna o outro braço lento. Dados com mais de 400 ms são ignorados. São filtros de acompanhamento, não uma máquina de estados de golpes.
 - A cena 3D é um módulo separado; Three core, renderer e componentes são divididos em chunks. Não há pós-processamento, HDR externo, partículas ou física. Materiais/geometrias são reutilizados e liberados ao desmontar a cena.
 - A preferência por movimento reduzido remove a oscilação decorativa das pernas e desacelera a demonstração. A resposta funcional ao corpo continua disponível.
+- A qualidade inicial é Leve para reduzir o custo de sombras e resolução; Equilibrada continua disponível. A cena memoizada evita propagar atualizações do diagnóstico pela árvore 3D. Não foi medida uma melhora de FPS no dispositivo do jogador.
+- Velocidade é calculada em unidades corporais por segundo, com suavização de 70 ms, validação de intervalo e reinicialização após ausência. A recuperação de profundidade inicia uma nova referência, sem inventar velocidade Z.
+- Socos exigem profundidade confiável no próprio braço, retração anterior, extensão crescente e velocidade predominante para a frente. Intervalo entre socos do mesmo braço: 500 ms, com nova retração obrigatória. A janela aceita trajetórias de 60–350 ms; guarda usa permanência de 150 ms e esquiva de 100 ms, com limiares diferentes de entrada/saída.
 
 ### Testes e validação
 
 Os testes unitários exercitam validação de landmarks, filtros em taxas diferentes, perdas individuais/globais, enquadramento, confiança, coordenadas mundiais, erros de câmera, descarte, cancelamento durante inicialização, reinícios concorrentes, desconexão, página oculta, timeout, frames repetidos e limites de agendamento. A fase 2 acrescenta testes de orientação por cinemática direta, espelhamento, proporção, profundidade, limites articulares, perda de sinal, interpolação independente de FPS, pausa e projeção da câmera. Streams, vídeo e relógio são doubles de teste; esses resultados não equivalem a um teste com webcam física.
 
-A instalação, `typecheck`, testes e build foram executados com sucesso. O usuário confirmou o tracking da fase 1. Na fase 2, mesmo após autorização explícita para abrir a prévia, a política do navegador bloqueou a origem local por uma permissão salva. Aparência renderizada, correspondência corpo/robô, responsividade visual, console e desempenho 3D permanecem **pendentes de revisão manual**. A demonstração é identificada como programada e não preenche os indicadores da webcam com dados artificiais. Veja o [relatório da fase 2](docs/phase-2-review.md).
+A fase 3 passou em **197 testes em 10 arquivos**, TypeScript e build. Há testes da cadeia completa com poses sintéticas: calibração, extração de velocidade e um único soco frontal, além das regressões para projeção 2D colapsada, perda de profundidade, falsos positivos, cooldown e repetição. As poses de teste nunca alimentam a câmera da aplicação.
+
+A prévia automática continua indisponível por uma permissão salva/política do navegador que bloqueou a origem local na fase anterior, inclusive após autorização do usuário. Nesta fase não houve nova tentativa de contornar esse bloqueio. A captura enviada pelo usuário confirmou a aparência da fase 2; a correção frontal, calibração, gestos e desempenho da fase 3 permanecem **pendentes de revisão com webcam real**. A demonstração é identificada como programada e não preenche os indicadores da webcam com dados artificiais. Veja o [relatório da fase 3](docs/phase-3-review.md).
 
 ## Limitações atuais
 
-- Fases 1 e 2: sem calibração, reconhecimento de golpes, animações próprias de ataque, controle de combate ou IA. A estranheza dos socos em direção à câmera pode persistir; não há medição monocular precisa de profundidade.
+- Fases 1 a 3: sem animações próprias de ataque, hooks/uppercuts/combos, arena, dano ou IA. Reconhecer um gesto apenas atualiza o diagnóstico; animações híbridas ficam para a fase 4.
 - A inferência `detectForVideo` é síncrona e ocorre na thread principal. O teto de frequência e o modelo Lite reduzem o custo, mas podem ocorrer pausas durante carregamento ou em CPUs fracas. Não há Worker implementado. O contrato do backend preserva uma fronteira para futura migração, que exigirá um protocolo assíncrono e transferência de frames.
 - 60 FPS de exibição e 20–30 inferências/s são objetivos, não resultados garantidos ou comprovados nesta máquina.
 - O filtro reduz tremores, adicionando atraso visual. Inferência usa uma única imagem monocular; profundidade e inclinação são aproximadas.
+- Um punho à frente pode esconder o cotovelo. Sem confiança suficiente, o sistema não reconstrói esse braço à força; ele volta suavemente ao repouso até a detecção se recuperar. A correção do solver remove a restrição artificial, mas não resolve oclusão física nem garante precisão de profundidade.
+- Alcances rápidos à frente podem compartilhar a geometria de um soco; heurísticas não inferem intenção. Limiares iniciais podem precisar de ajuste com pessoas, velocidades e câmeras diferentes. Confiança exibida é a menor confiança dos dados envolvidos, não uma probabilidade validada de acerto.
 - Enquadramento é uma heurística relativa à largura dos ombros e à visibilidade; não mede distância em metros nem identifica iluminação ruim diretamente.
 - Ocultação, baixa luz, roupas, campo de visão e múltiplas pessoas podem prejudicar a pose. O laboratório rastreia uma pessoa e não valida identidade.
 - Resolução é uma preferência; dispositivos podem fornecer outra. A CPU de fallback pode reduzir a frequência efetiva.
 - O modelo e as alternativas SIMD/não-SIMD WASM ampliam `dist/` (aproximadamente 47 MB sem compressão); cada navegador carrega apenas o runtime selecionado. O runtime 3D adiciona aproximadamente 0,94 MB de JavaScript minificado, dividido em chunks.
 - O rig aproxima a silhueta e a flexão dos braços; não resolve colisões entre as partes do robô, não estima pegadas ou dedos, nem compensa completamente rotações fora do plano. Mantenha-se de frente para melhores resultados.
-- Não há testes de ponta a ponta ou aferição visual do robô nesta entrega. Câmera/CPU e renderização compartilham a thread principal; use 480p e qualidade Leve se houver lentidão.
+- Não há testes de ponta a ponta no navegador nem aferição real dos gestos nesta entrega. Câmera/CPU e renderização compartilham a thread principal; use 480p e qualidade Leve se houver lentidão.
 
 ## Roadmap e autorização
 
 1. **Fundação e motion tracking:** implementada; funcionamento dos braços confirmado pelo usuário.
-2. **Robô 3D e espelhamento:** implementação atual, aguardando revisão visual do usuário.
-3. **Motion engine e gestos:** calibração, velocidades, guarda e primeiros golpes.
+2. **Robô 3D e espelhamento:** implementada; aparência confirmada pelo usuário, limitação frontal tratada na fase 3.
+3. **Motion engine e gestos:** implementação atual, aguardando revisão real de calibração, guarda, esquivas e socos.
 4. **Animações híbridas:** máquina de estados e blending.
 5. **Arena e combate:** adversário, hitboxes, dano e rounds.
 6. **Polimento:** efeitos, som, acessibilidade e otimização.
 7. **Expansões:** somente mediante autorização futura.
 
-O desenvolvimento está interrompido ao final da fase 2. Nenhuma branch, commit ou push foi feito pelo agente. O repositório existente foi preservado. Sugestão de commit, após autorização: `feat: add articulated robot and body motion mirroring`.
+O desenvolvimento está interrompido ao final da fase 3. Nenhuma branch, commit ou push foi feito pelo agente. O repositório existente foi preservado. Sugestão de commit, após autorização: `feat: add calibrated motion gestures and forward arm tracking`.
 
 ## Referências técnicas
 

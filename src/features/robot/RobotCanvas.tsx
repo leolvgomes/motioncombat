@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Grid } from '@react-three/drei'
 import { RigController, RIG_JOINTS } from '../../engine/motion/rig-controller'
@@ -98,7 +98,7 @@ function CanvasFallback({ children }: { children: React.ReactNode }) {
   return <div className="robot-renderer-error" role="alert"><strong>Visualização 3D indisponível</strong><p>{children}</p></div>
 }
 
-export default function RobotCanvas() {
+function RobotCanvas() {
   const quality = useRobotStore((state) => state.quality)
   const [lost, setLost] = useState(false)
   const [revision, setRevision] = useState(0)
@@ -129,3 +129,5 @@ export default function RobotCanvas() {
     </Canvas>
   </div>
 }
+
+export default memo(RobotCanvas)

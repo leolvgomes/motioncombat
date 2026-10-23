@@ -34,6 +34,9 @@ export class RigController {
   private previousAspect = 16 / 9
   private demoTime = 0
   private demoSampleIn = 0
+  private trackedLeft = false
+  private trackedRight = false
+  private trackedTorso = false
 
   constructor() {
     for (const name of RIG_JOINTS) this.rotations[name].fromArray(this.rest[name])
@@ -69,6 +72,14 @@ export class RigController {
       if (fresh) {
         if (pose !== this.previousPose || switched || input.mirrored !== this.previousMirror || input.aspectRatio !== this.previousAspect) {
           this.target = retargetPose(pose, { mirrored: input.mirrored, aspectRatio: input.aspectRatio })
+          const visible = (index: number) => {
+            const point = pose.landmarks[index]
+            return point && point.visibility >= 0.5 && Number.isFinite(point.x) && Number.isFinite(point.y)
+              && point.x >= 0 && point.x <= 1 && point.y >= 0 && point.y <= 1
+          }
+          this.trackedLeft = (input.mirrored ? [12, 14, 16] : [11, 13, 15]).every(visible)
+          this.trackedRight = (input.mirrored ? [11, 13, 15] : [12, 14, 16]).every(visible)
+          this.trackedTorso = [11, 12].every(visible)
           this.previousPose = pose
           this.previousMirror = input.mirrored
           this.previousAspect = input.aspectRatio
@@ -80,11 +91,14 @@ export class RigController {
     }
 
     // Quaternion damping is independent of display FPS. A lost source returns gently to rest.
-    const settling = this.sourceStatus === 'lost' || this.sourceStatus === 'idle' || this.sourceStatus === 'partial'
-    const alpha = -Math.expm1(-dt / (settling ? 0.2 : 0.055))
+    const settling = this.sourceStatus === 'lost' || this.sourceStatus === 'idle'
+    const fastAlpha = -Math.expm1(-dt / 0.055)
+    const restAlpha = -Math.expm1(-dt / 0.2)
     for (const name of RIG_JOINTS) {
+      // One hidden arm must not add latency to the other visible arm's forward movement.
+      const tracked = this.sourceStatus === 'demo' || (name.startsWith('left') ? this.trackedLeft : name.startsWith('right') ? this.trackedRight : this.trackedTorso)
       this.scratch.fromArray(this.target[name])
-      this.rotations[name].slerp(this.scratch, alpha)
+      this.rotations[name].slerp(this.scratch, settling || !tracked ? restAlpha : fastAlpha)
     }
   }
 }

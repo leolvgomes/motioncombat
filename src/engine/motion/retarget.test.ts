@@ -25,6 +25,27 @@ function pose(overrides: PointOverrides = {}): ProcessedPose {
   }
 }
 
+function withWorld(source: ProcessedPose, overrides: PointOverrides = {}): ProcessedPose {
+  return {
+    ...source,
+    worldLandmarks: source.landmarks.map((point, index) => ({
+      ...point, x: (point.x - 0.5) * 4 / 3, y: point.y - 0.95, z: 0, ...overrides[index],
+    })),
+  }
+}
+
+function forwardPose(side: 'left' | 'right' = 'left', backwards = false): ProcessedPose {
+  const elbowIndex = side === 'left' ? 13 : 14
+  const wristIndex = side === 'left' ? 15 : 16
+  const x = side === 'left' ? 0.65 : 0.35
+  const worldX = side === 'left' ? 0.2 : -0.2
+  const zSign = backwards ? 1 : -1
+  return withWorld(pose({ [elbowIndex]: { x, y: 0.35 }, [wristIndex]: { x, y: 0.35 } }), {
+    [elbowIndex]: { x: worldX, y: -0.6, z: zSign * 0.3 },
+    [wristIndex]: { x: worldX, y: -0.6, z: zSign * 0.57 },
+  })
+}
+
 function quaternion(rotation: QuaternionTuple): Quaternion {
   return new Quaternion(...rotation)
 }
@@ -213,8 +234,7 @@ describe('retargetPose', () => {
     }))
     const rig = retargetPose({ ...source, worldLandmarks }, OPTIONS)
     const upper = direction(rig, 'left', 'upper')
-    expect(upper.z).toBeGreaterThan(0)
-    expect(upper.z / Math.hypot(upper.x, upper.y)).toBeLessThanOrEqual(0.3 + 1e-9)
+    expectDirection(upper, [0.15, 0, 0.3])
     expectDirection(direction(rig, 'left', 'forearm'), [0, 1, 0])
     expectFiniteUnit(rig)
   })
@@ -241,6 +261,168 @@ describe('retargetPose', () => {
     }))
     const rig = retargetPose({ ...source, worldLandmarks }, OPTIONS)
     expectDirection(direction(rig, 'left', 'upper'), [0, -1, 0])
+  })
+
+  it.each(['left', 'right'] as const)('fully extends the %s arm toward +Z when both image segments collapse', (side) => {
+    const rig = retargetPose(forwardPose(side), OPTIONS)
+    expectDirection(direction(rig, side, 'upper'), [0, 0, 1])
+    expectDirection(direction(rig, side, 'forearm'), [0, 0, 1])
+    const wristReach = direction(rig, side, 'upper').multiplyScalar(0.47)
+      .addScaledVector(direction(rig, side, 'forearm'), 0.43)
+    expect(wristReach.z).toBeCloseTo(0.9, 7)
+    expectFiniteUnit(rig)
+  })
+
+  it('keeps legitimate backward -Z extension instead of forcing all depth to the front', () => {
+    const rig = retargetPose(forwardPose('left', true), OPTIONS)
+    expectDirection(direction(rig, 'left', 'upper'), [0, 0, -1])
+    expectDirection(direction(rig, 'left', 'forearm'), [0, 0, -1])
+    expectFiniteUnit(rig)
+  })
+
+  it.each(['left', 'right'] as const)('swaps a forward %s extension to the opposite robot arm when mirroring', (side) => {
+    const otherSide = side === 'left' ? 'right' : 'left'
+    const rig = retargetPose(forwardPose(side), { ...OPTIONS, mirrored: true })
+    expectDirection(direction(rig, otherSide, 'upper'), [0, 0, 1])
+    expectDirection(direction(rig, otherSide, 'forearm'), [0, 0, 1])
+    expectDirection(direction(rig, side, 'upper'), [0, -1, 0])
+  })
+
+  it('mirrors world X while preserving forward depth and the anatomical source swap', () => {
+    const source = withWorld(pose({ 13: { x: 0.66, y: 0.35 }, 15: { x: 0.67, y: 0.35 } }), {
+      13: { x: 0.25, y: -0.6, z: -0.3 },
+      15: { x: 0.3, y: -0.6, z: -0.57 },
+    })
+    const left = direction(retargetPose(source, OPTIONS), 'left', 'upper')
+    const right = direction(retargetPose(source, { ...OPTIONS, mirrored: true }), 'right', 'upper')
+    expect(left.x).toBeGreaterThan(0)
+    expect(right.x).toBeCloseTo(-left.x, 7)
+    expect(right.y).toBeCloseTo(left.y, 7)
+    expect(right.z).toBeCloseTo(left.z, 7)
+    expect(right.z).toBeGreaterThan(0.98)
+  })
+
+  it('follows a continuous down-to-forward extension through the foreshortened endpoint', () => {
+    let previous: Quaternion | null = null
+    for (let sample = 0; sample <= 32; sample += 1) {
+      const angle = sample / 32 * Math.PI / 2
+      const down = Math.cos(angle)
+      const forward = Math.sin(angle)
+      const source = withWorld(pose({ 13: { y: 0.35 + down * 0.2 }, 15: { y: 0.35 + down * 0.4 } }), {
+        13: { x: 0.2, y: -0.6 + down * 0.3, z: -forward * 0.3 },
+        15: { x: 0.2, y: -0.6 + down * 0.57, z: -forward * 0.57 },
+      })
+      const rig = retargetPose(source, OPTIONS)
+      expectDirection(direction(rig, 'left', 'upper'), [0, -down, forward])
+      expectDirection(direction(rig, 'left', 'forearm'), [0, -down, forward])
+      const current = quaternion(rig.leftShoulder)
+      if (previous) expect(current.angleTo(previous)).toBeLessThan(0.08)
+      expectFiniteUnit(rig)
+      previous = current
+    }
+  })
+
+  it('keeps shoulder roll stable around fully forward and fully backward directions', () => {
+    for (const zSign of [-1, 1]) {
+      let previous: Quaternion | null = null
+      for (let sample = 0; sample <= 32; sample += 1) {
+        const phase = sample / 32 * Math.PI * 2
+        const dx = Math.cos(phase) * 0.0003
+        const dy = Math.sin(phase) * 0.0003
+        const source = forwardPose()
+        const worldLandmarks = source.worldLandmarks.map((point, index) => index === 13 || index === 15
+          ? { ...point, x: point.x + dx, y: point.y + dy, z: Math.abs(point.z) * zSign }
+          : point)
+        const rig = retargetPose({ ...source, worldLandmarks }, OPTIONS)
+        const current = quaternion(rig.leftShoulder)
+        if (previous) expect(current.angleTo(previous)).toBeLessThan(0.01)
+        expect(Math.abs(direction(rig, 'left', 'upper').z)).toBeGreaterThan(0.99)
+        expectFiniteUnit(rig)
+        previous = current
+      }
+    }
+  })
+
+  it.each([
+    { axis: [0, 1, 0], side: 'left', overrides: { 13: { y: 0.15 }, 15: { y: 0.02 } } },
+    { axis: [0, -1, 0], side: 'left', overrides: {} },
+    { axis: [1, 0, 0], side: 'left', overrides: { 13: { x: 0.8, y: 0.35 }, 15: { x: 0.95, y: 0.35 } } },
+    { axis: [-1, 0, 0], side: 'right', overrides: { 14: { x: 0.2, y: 0.35 }, 16: { x: 0.05, y: 0.35 } } },
+  ] as const)('maps metric world axis $axis with valid local rotations', ({ axis, side, overrides }) => {
+    const source = pose(overrides)
+    const worldX = side === 'left' ? 0.2 : -0.2
+    const elbowIndex = side === 'left' ? 13 : 14
+    const wristIndex = side === 'left' ? 15 : 16
+    const rig = retargetPose(withWorld(source, {
+      [elbowIndex]: { x: worldX + axis[0] * 0.3, y: -0.6 - axis[1] * 0.3, z: 0 },
+      [wristIndex]: { x: worldX + axis[0] * 0.57, y: -0.6 - axis[1] * 0.57, z: 0 },
+    }), OPTIONS)
+    expectDirection(direction(rig, side, 'upper'), axis)
+    expectDirection(direction(rig, side, 'forearm'), axis)
+    expectFiniteUnit(rig)
+  })
+
+  it('preserves the metric XYZ direction independently from the camera aspect ratio', () => {
+    const source = withWorld(pose({ 13: { x: 0.7, y: 0.3 }, 15: { x: 0.74, y: 0.26 } }), {
+      13: { x: 0.29, y: -0.72, z: -0.25 },
+      15: { x: 0.37, y: -0.82, z: -0.48 },
+    })
+    for (const aspectRatio of [0.75, 1, 16 / 9, 2.5]) {
+      const rig = retargetPose(source, { ...OPTIONS, aspectRatio })
+      expectDirection(direction(rig, 'left', 'upper'), [0.09, 0.12, 0.25])
+      expectDirection(direction(rig, 'left', 'forearm'), [0.08, 0.1, 0.23])
+    }
+  })
+
+  it.each([
+    { visibility: 0.64 }, { visibility: 2 }, { visibility: Number.NaN },
+    { z: Number.NaN }, { x: Number.POSITIVE_INFINITY },
+  ])('rejects unreliable world data independently for one arm: %j', (invalid) => {
+    const source = forwardPose()
+    const worldLandmarks = source.worldLandmarks.map((point, index) => index === 15 ? { ...point, ...invalid } : point)
+    const rig = retargetPose({ ...source, worldLandmarks }, OPTIONS)
+    const rest = createRestPose()
+    expect(rig.leftShoulder).toEqual(rest.leftShoulder)
+    expect(rig.leftElbow).toEqual(rest.leftElbow)
+    expectDirection(direction(rig, 'right', 'upper'), [0, -1, 0])
+    expectFiniteUnit(rig)
+  })
+
+  it.each([
+    { 13: { z: -3 }, 15: { z: -6 } },
+    { 13: { z: -0.005 }, 15: { z: -0.275 } },
+    { 13: { z: -0.3 }, 15: { z: -0.85 } },
+  ])('uses the projected fallback for implausible metric arm lengths: %j', (overrides) => {
+    const source = withWorld(pose(), {
+      13: { x: 0.2, y: -0.6, ...overrides[13] },
+      15: { x: 0.2, y: -0.6, ...overrides[15] },
+    })
+    const rig = retargetPose(source, OPTIONS)
+    expectDirection(direction(rig, 'left', 'upper'), [0, -1, 0])
+    expectDirection(direction(rig, 'left', 'forearm'), [0, -1, 0])
+    expectFiniteUnit(rig)
+  })
+
+  it('rejects world XY axes that disagree with confidently projected motion', () => {
+    const source = withWorld(pose({ 13: { x: 0.8, y: 0.35 }, 15: { x: 0.95, y: 0.35 } }), {
+      13: { x: -0.1, y: -0.6, z: 0 },
+      15: { x: -0.37, y: -0.6, z: 0 },
+    })
+    const rig = retargetPose(source, OPTIONS)
+    expectDirection(direction(rig, 'left', 'upper'), [1, 0, 0])
+    expectDirection(direction(rig, 'left', 'forearm'), [1, 0, 0])
+  })
+
+  it('uses broad body-relative bounds instead of fixing world bones to one person size', () => {
+    const source = forwardPose()
+    for (const scale of [0.5, 1, 1.5]) {
+      const worldLandmarks = source.worldLandmarks.map((point) => ({
+        ...point, x: point.x * scale, y: point.y * scale, z: point.z * scale,
+      }))
+      const rig = retargetPose({ ...source, worldLandmarks }, OPTIONS)
+      expectDirection(direction(rig, 'left', 'upper'), [0, 0, 1])
+      expectDirection(direction(rig, 'left', 'forearm'), [0, 0, 1])
+    }
   })
 
   it('prevents an elbow folding beyond 150 degrees and extreme cross-body upper-arm swings', () => {

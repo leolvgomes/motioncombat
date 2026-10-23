@@ -21,7 +21,7 @@ interface RobotStore {
 
 export const useRobotStore = create<RobotStore>((set) => ({
   mode: 'tracking',
-  quality: 'balanced',
+  quality: 'light',
   paused: false,
   view: 'front',
   sceneFps: null,

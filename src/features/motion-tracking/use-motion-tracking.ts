@@ -5,6 +5,7 @@ import { drawPose } from './draw-pose'
 import { TrackingSession } from './tracking-session'
 import { publishPose, setPoseAspectRatio } from './pose-stream'
 import { useRobotStore } from '../../stores/robot-store'
+import { combatMotionRuntime } from './combat-motion-runtime'
 
 export function useMotionTracking() {
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -19,8 +20,15 @@ export function useMotionTracking() {
     const video = videoRef.current
     if (!video) return
     const session = new TrackingSession(video, {
-      onState: (state) => useLabStore.getState().setSession(state),
-      onPose: (pose) => { poseRef.current = pose; publishPose(pose) },
+      onState: (state) => {
+        useLabStore.getState().setSession(state)
+        if (state.status !== 'running') combatMotionRuntime.reset()
+      },
+      onPose: (pose) => {
+        poseRef.current = pose
+        publishPose(pose)
+        combatMotionRuntime.process(pose)
+      },
       onMetrics: (metrics) => {
         const store = useLabStore.getState()
         if (store.session.status !== 'running') return
@@ -33,6 +41,7 @@ export function useMotionTracking() {
           framing: pose.framing,
           visibility: pose.landmarks.map((point) => point.visibility),
         } : null)
+        combatMotionRuntime.publish()
       },
     })
     sessionRef.current = session
