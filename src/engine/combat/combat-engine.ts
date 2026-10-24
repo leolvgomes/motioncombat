@@ -1,10 +1,13 @@
-import type { CombatInput, CombatSnapshot, FighterFrame, FighterId, ImpactEvent, MatchMode, MatchWinner, PauseReason } from '../../types/combat'
+import { Vector3 } from 'three'
+import type { CombatEvent, CombatInput, CombatSnapshot, FighterFrame, FighterId, ImpactEvent, MatchMode, MatchWinner, PauseReason } from '../../types/combat'
 import { CombatFighter } from './fighter'
 import { CombatHitGeometry } from './collision'
 import { COMBAT_RULES } from './config'
 
 type MutableSnapshot = { -readonly [Key in keyof CombatSnapshot]: CombatSnapshot[Key] }
-interface Resolution { result: ImpactEvent['result']; pending: boolean }
+interface Resolution { result: ImpactEvent['result']; pending: boolean; readonly position: Vector3 }
+
+const MAX_PENDING_EVENTS = 64
 
 /** KO and timeout ties share the same explicit health comparison. */
 export function healthWinner(player: number, opponent: number): MatchWinner {
@@ -18,8 +21,9 @@ export class CombatEngine {
   private readonly opponent: CombatFighter
   private readonly frameRecord: Record<FighterId, FighterFrame>
   private readonly geometry = new CombatHitGeometry()
-  private readonly playerResolution: Resolution = { pending: false, result: 'miss' }
-  private readonly opponentResolution: Resolution = { pending: false, result: 'miss' }
+  private readonly playerResolution: Resolution = { pending: false, result: 'miss', position: new Vector3() }
+  private readonly opponentResolution: Resolution = { pending: false, result: 'miss', position: new Vector3() }
+  private readonly events: CombatEvent[] = []
   private readonly state: MutableSnapshot
   private accumulator = 0
   private consumedSequence = -1
@@ -45,6 +49,9 @@ export class CombatEngine {
   get snapshot(): CombatSnapshot { return this.state }
   get fighters(): Record<FighterId, FighterFrame> { return this.frameRecord }
 
+  /** Hands presentation events to one consumer, oldest first. Rules never read them back. */
+  drainEvents(): CombatEvent[] { return this.events.splice(0) }
+
   start(mode: MatchMode, input: CombatInput): boolean {
     if (this.state.phase !== 'ready' && this.state.phase !== 'finished' || !Number.isFinite(input.now)
       || mode === 'webcam' && !this.validSource(input)) return false
@@ -55,6 +62,7 @@ export class CombatEngine {
     this.blockCurrentSignals(input)
     this.setBases(input)
     this.compose()
+    this.emit({ type: 'countdown', round: 1, value: Math.ceil(COMBAT_RULES.countdown) })
     return true
   }
 
@@ -119,6 +127,12 @@ export class CombatEngine {
     this.lockedMirror = false
     this.signalBoundary = Infinity
     this.impactSequence = 0
+    this.events.length = 0
+  }
+
+  private emit(event: CombatEvent): void {
+    if (this.events.length >= MAX_PENDING_EVENTS) this.events.shift()
+    this.events.push(event)
   }
 
   private validSource(input: CombatInput): boolean {
@@ -150,8 +164,8 @@ export class CombatEngine {
       || event.timestamp <= this.signalBoundary || !Number.isFinite(event.confidence) || event.confidence < 0.6 || event.confidence > 1) return
     if (event.type !== 'PUNCH_LEFT' && event.type !== 'PUNCH_RIGHT') return
     const humanLeft = event.type === 'PUNCH_LEFT'
-    const modelLeft = input.mirrored ? !humanLeft : humanLeft
-    this.player.beginAttack(modelLeft ? 'left' : 'right')
+    const side = (input.mirrored ? !humanLeft : humanLeft) ? 'left' : 'right'
+    if (this.player.beginAttack(side)) this.emit({ type: 'attack', fighter: 'player', side })
   }
 
   private setBases(input: CombatInput): void {
@@ -162,8 +176,15 @@ export class CombatEngine {
   private fixedStep(input: CombatInput): void {
     const dt = COMBAT_RULES.fixedStep
     if (this.state.phase === 'countdown') {
+      const shown = Math.ceil(this.state.countdown - 1e-8)
       this.state.countdown = Math.max(0, this.state.countdown - dt)
-      if (this.state.countdown < 1e-8) { this.state.countdown = 0; this.state.phase = 'fighting' }
+      if (this.state.countdown < 1e-8) {
+        this.state.countdown = 0
+        this.state.phase = 'fighting'
+        this.emit({ type: 'fight', round: this.state.round })
+      } else if (Math.ceil(this.state.countdown - 1e-8) !== shown) {
+        this.emit({ type: 'countdown', round: this.state.round, value: Math.ceil(this.state.countdown - 1e-8) })
+      }
       this.compose()
       return
     }
@@ -204,6 +225,7 @@ export class CombatEngine {
   }
 
   private updateAI(fighter: CombatFighter, other: CombatFighter, dt: number): void {
+    const previousTelegraph = fighter.telegraphSide
     fighter.blocking = false
     fighter.telegraphSide = null
     if (fighter.stun > 0 || fighter.returning > 0 || fighter.health <= 0) return
@@ -212,6 +234,9 @@ export class CombatEngine {
     fighter.action = decision.action
     fighter.blocking = !fighter.attack && decision.blocking
     fighter.telegraphSide = decision.telegraphSide
+    if (decision.telegraphSide && decision.telegraphSide !== previousTelegraph) {
+      this.emit({ type: 'telegraph', fighter: fighter.id, side: decision.telegraphSide })
+    }
     if (decision.movement !== 0 && !fighter.attack) {
       const toward = fighter.id === 'player' ? 1 : -1
       const speed = decision.movement === 1 ? COMBAT_RULES.approachSpeed : COMBAT_RULES.retreatSpeed
@@ -219,7 +244,7 @@ export class CombatEngine {
       fighter.anchorZ += toward * decision.movement * amount
       fighter.anchorZ = fighter.id === 'player' ? Math.max(-0.95, Math.min(0.4, fighter.anchorZ)) : Math.max(0.45, Math.min(1.8, fighter.anchorZ))
     }
-    if (decision.attack) fighter.beginAttack(decision.attack)
+    if (decision.attack && fighter.beginAttack(decision.attack)) this.emit({ type: 'attack', fighter: fighter.id, side: decision.attack })
   }
 
   private checkAttack(attacker: CombatFighter, defender: CombatFighter, resolution: Resolution): void {
@@ -232,6 +257,7 @@ export class CombatEngine {
     if (end >= start && attack.elapsed >= window.start && attack.previousElapsed < window.end) {
       attacker.fistAt(start, this.geometry, attacker.sweepFrom)
       attacker.fistAt(end, this.geometry, attacker.sweepTo)
+      resolution.position.copy(attacker.sweepTo)
       if (this.geometry.intersects(attacker.sweepFrom, attacker.sweepTo, defender.frame)) {
         attack.resolved = true
         resolution.pending = true
@@ -256,11 +282,15 @@ export class CombatEngine {
       if (result === 'hit') attacker.stats.hits += 1
       else defender.stats.blocks += 1
     } else if (result === 'dodged') defender.stats.dodges += 1
-    this.state.lastImpact = { id: ++this.impactSequence, attacker: attacker.id, result, damage }
+    const impact: ImpactEvent = { id: ++this.impactSequence, attacker: attacker.id, result, damage }
+    this.state.lastImpact = impact
+    const { x, y, z } = resolution.position
+    this.emit({ type: 'impact', impact: { ...impact }, position: [x, y, z], defenderHealth: defender.health })
   }
 
   private endRound(): void {
     const result = healthWinner(this.player.health, this.opponent.health)
+    const knockout = this.player.health <= 0 || this.opponent.health <= 0
     this.state.roundWinner = result
     if (result === 'player') this.state.playerWins += 1
     else if (result === 'opponent') this.state.opponentWins += 1
@@ -275,6 +305,8 @@ export class CombatEngine {
       this.state.phase = 'round-over'
       this.state.betweenRoundsLeft = COMBAT_RULES.betweenRounds
     }
+    this.emit({ type: 'round-end', round: this.state.round, winner: result, knockout })
+    if (this.state.winner) this.emit({ type: 'match-end', winner: this.state.winner, mode: this.state.mode })
     this.compose()
   }
 
@@ -290,6 +322,7 @@ export class CombatEngine {
     this.state.opponentHealth = this.opponent.health
     this.blockCurrentSignals(input)
     this.setBases(input)
+    this.emit({ type: 'fight', round: this.state.round })
   }
 
   private compose(): void {

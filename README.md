@@ -1,6 +1,6 @@
 # STEEL SYNC — Motion Combat
 
-Jogo web de combate robótico controlado pelo corpo. As **fases 1 a 5** implementam webcam, rastreamento corporal, robôs 3D procedurais, calibração, gestos, animações híbridas e uma partida local contra IA, com arena, hitboxes, vida, defesa, rounds e resultado. O laboratório de movimento continua disponível; uma demonstração IA × IA permite observar o combate sem câmera.
+Jogo web de combate robótico controlado pelo corpo. As **fases 1 a 5** implementam webcam, rastreamento corporal, robôs 3D procedurais, calibração, gestos, animações híbridas e uma partida local contra IA, com arena, hitboxes, vida, defesa, rounds e resultado. A **fase 6** acrescenta polimento: faíscas e anéis de impacto, tremor de câmera, som procedural, narração para leitores de tela, atalhos de teclado e sugestão de qualidade por FPS. O laboratório de movimento continua disponível; uma demonstração IA × IA permite observar o combate sem câmera.
 
 ## Stack
 
@@ -14,9 +14,10 @@ Jogo web de combate robótico controlado pelo corpo. As **fases 1 a 5** implemen
 | Drei 10 | Grade de referência da plataforma de teste |
 | Zustand 5 | Configurações, estado da sessão e diagnóstico reduzido |
 | Lucide React | Ícones vetoriais locais |
-| Vitest 5 | Câmera, rig, gestos, animações, geometria de contato, regras e integração |
+| Web Audio API | Sons de combate sintetizados no navegador, sem arquivos de áudio |
+| Vitest 5 | Câmera, rig, gestos, animações, geometria de contato, regras, efeitos, áudio e integração |
 
-Não há motor de física, backend, upload, gravação de vídeo, analytics ou persistência de landmarks. O combate usa passos fixos e volumes geométricos simples; não necessita de Rapier nesta fase.
+Não há motor de física, backend, upload, gravação de vídeo, analytics ou persistência de landmarks. O combate usa passos fixos e volumes geométricos simples; não necessita de Rapier. A única persistência é a preferência de som/efeitos no `localStorage` do navegador.
 
 ## Requisitos
 
@@ -60,6 +61,9 @@ Execute `setup:tracking` **antes do build** para incluir o modelo e WASM em `dis
 5. A partida tem até três rounds de 45 segundos. Duas vitórias encerram antes do terceiro; nocaute encerra o round, e o tempo compara a vida restante. Empates são possíveis. A vida é restaurada no início de cada round; estatísticas acumulam na partida.
 6. **Pausar**, sair do enquadramento, recalibrar, trocar o espelho, ocultar a página ou abrir o laboratório interrompe a partida. Ela requer **Retomar** após recuperar uma fonte válida; nenhum ataque antigo fica enfileirado. A página oculta também desliga a câmera, exigindo novo início e calibração.
 7. Após o resultado, inicie outra partida ou volte à preparação. A demonstração utiliza as mesmas regras de contato, dano e rounds, com dois controladores programados.
+8. Em **Som e efeitos**, abaixo da arena, ligue/desligue o som, ajuste o volume e escolha se quer faíscas de impacto e tremor de câmera. As preferências ficam salvas neste navegador. O áudio só começa após um clique (iniciar, retomar ou ligar o som), conforme a política dos navegadores.
+9. Atalhos de teclado na arena: **P** pausa ou retoma; **M** liga ou desliga o som. Eles não funcionam enquanto o foco estiver em um campo, seletor ou controle deslizante, e não existe atalho de ataque.
+10. Se a arena ficar abaixo de 42 FPS por alguns segundos na qualidade Equilibrada, aparece uma sugestão para usar a qualidade Leve. A troca nunca é automática.
 
 A arena e o laboratório alternam a cena 3D; somente um canvas 3D fica montado. Captura e calibração continuam montadas ao trocar de visão. Os ajustes de duração/amplitude do laboratório não alteram as regras balanceadas da partida.
 
@@ -117,6 +121,13 @@ Se a permissão foi negada, libere-a nas configurações do site no navegador. S
 - Transição de 350 ms da pose atual para vitória/derrota. Após encerrar a partida, somente essa finalização visual avança; placar, dano, IA e relógio permanecem congelados.
 - Pausa persistente na perda de tracking ou troca de visão, recuperação explícita e descarte de ataques durante pausa/contagem.
 - Demonstração IA × IA identificada, sem fabricar landmarks ou indicadores de câmera.
+- Eventos de apresentação emitidos pelo motor (contagem, início de round, golpe, preparação, contato com posição, fim de round e de partida). Som, efeitos e narração consomem esses eventos; nenhum deles altera regras.
+- Faíscas no ponto real de contato, com cores distintas para acerto e bloqueio, anel de impacto voltado para a câmera e ênfase no nocaute. Esquivas e golpes fora de alcance não geram faíscas.
+- Tremor de câmera proporcional ao impacto, mais forte quando o jogador é atingido. Pausa congela faíscas e tremor junto com a cena.
+- Sons sintetizados para contagem, início, deslocamento do soco, acerto, bloqueio, esquiva, nocaute, sino de round, vitória, derrota e empate; aviso sonoro da preparação do adversário somente na partida com webcam. Leve diferença de timbre entre os robôs e limite de vozes simultâneas.
+- Narração em região `aria-live` para início de rounds, contatos com integridade restante, fim de round e resultado. O aviso visual de impacto deixou de ser anunciado em duplicidade.
+- Integridade crítica (≤ 25) destacada também por texto, não apenas por cor; o medidor informa o valor em texto acessível.
+- Respeito a movimento reduzido: tremor desligado e faíscas reduzidas pela metade, com aviso no painel.
 
 ## Arquitetura
 
@@ -129,14 +140,16 @@ src/
 │   ├── camera/                     # Acesso à webcam e painel
 │   ├── motion-tracking/            # MediaPipe, sessão, overlay e stream de pose
 │   ├── robot/                      # Modelo, recursos e laboratório do rig
-│   ├── arena/                      # Cena do ringue, dois rigs e câmera
-│   └── combat/                     # Ponte de captura/partida, HUD e controles
+│   ├── arena/                      # Cena do ringue, dois rigs, câmera e efeitos de impacto
+│   ├── audio/                      # Sintetizador Web Audio e mapeamento evento → som
+│   └── combat/                     # Ponte de captura/partida, HUD, controles, narração e sugestão de qualidade
 ├── engine/
 │   ├── motion/                    # Filtros, retargeting, calibração e velocidades
 │   ├── gestures/                  # Reconhecimento geométrico e temporal, sem animação
 │   ├── animation/                 # Clips de soco e controlador de blending/estados
-│   └── combat/                    # Simulação, IA e geometria de contato
-├── stores/                        # Configurações e snapshots reduzidos da UI
+│   ├── combat/                    # Simulação, IA, geometria de contato e eventos
+│   └── effects/                   # Partículas, anéis e tremor de câmera, sem Three.js
+├── stores/                        # Configurações, preferências de som/efeitos e snapshots da UI
 └── types/                         # Landmarks, rig, clips e contratos de combate
 public/mediapipe/                   # Recursos gerados, ignorados pelo Git
 ```
@@ -152,6 +165,8 @@ public/mediapipe/                   # Recursos gerados, ignorados pelo Git
 Um ataque tem prioridade sobre guarda/esquiva e bloqueia novos ataques até terminar. Pulsos repetidos, anteriores à montagem da cena, com mais de 250 ms, sem calibração ou fonte válida não iniciam animação. Parar a câmera, recalibrar e trocar para demonstração invalidam a geração. Desativar a camada não enfileira golpes para quando ela for reativada.
 
 Na arena, `MatchRuntime` recebe a captura real, verifica a fonte e entrega `CombatInput` ao `CombatEngine`. O motor controla o tempo dos clips, IA, contato, vida e rounds. `FighterFrame` contém as mesmas transformações usadas para calcular os contatos e desenhar os robôs. `ArenaCanvas` não decide dano; o HUD recebe somente cópias dos snapshots, sem transformar a simulação em estado React.
+
+O `CombatEngine` acumula eventos de apresentação em uma fila limitada a 64 itens; `MatchRuntime.subscribe` os entrega, em ordem, após cada passo. Uma falha em um ouvinte é registrada e não interrompe a simulação. Os módulos de `engine/effects` são puros e testáveis; `ArenaCanvas` apenas os desenha com um `InstancedMesh` de 64 faíscas (uma chamada de desenho) e quatro anéis reaproveitados. `CombatAudio` cria o `AudioContext` somente em um gesto do usuário e o suspende ao ocultar a página ou sair da arena.
 
 ### Frequências e processamento
 
@@ -181,13 +196,16 @@ A verificação da fase 4 inclui a cadeia de landmarks sintéticos → calibraç
 
 Os testes da fase 5 verificam a geometria de contato, regras, IA, pausa/recuperação, rounds e a ponte entre captura e partida. O inventário das alterações e os resultados executados constam no [relatório da fase 5](docs/phase-5-review.md).
 
+A fase 6 acrescenta testes da coerência dos eventos com as estatísticas de uma partida completa, partículas, anéis, tremor, mapeamento e síntese de som com um duplo do Web Audio, narração, sugestão de qualidade e preferências salvas. Veja o [relatório da fase 6](docs/phase-6-review.md).
+
 A prévia automática continua indisponível por uma permissão salva/política do navegador que bloqueou a origem local anteriormente, inclusive após autorização do usuário. Nesta fase não houve nova tentativa de contornar esse bloqueio. A aparência das animações, a resposta com webcam e o desempenho permanecem **pendentes de revisão real**. A demonstração é identificada como programada e não preenche os indicadores da webcam com dados artificiais. O [relatório da fase 3](docs/phase-3-review.md) preserva o histórico da correção frontal.
 
 ## Limitações atuais
 
-- Fases 1 a 5: somente socos retos, sem hook/uppercut/especial/combos. Não há fila de golpes nem ataques simultâneos do mesmo robô. Na arena os dois lutadores podem atacar ao mesmo tempo; a resolução considera o contato de cada um.
+- Fases 1 a 6: somente socos retos, sem hook/uppercut/especial/combos. Não há fila de golpes nem ataques simultâneos do mesmo robô. Na arena os dois lutadores podem atacar ao mesmo tempo; a resolução considera o contato de cada um.
 - Hitboxes são aproximações geométricas de cabeça/corpo e punhos, sem física de contato entre peças ou IK para alcançar um alvo. A IA e o balanceamento são iniciais; os rounds e os resultados funcionam localmente, sem persistência.
-- Efeitos de impacto avançados, partículas e som ficam para a fase 6. O feedback atual usa vida, mensagens e um marcador visual de dano no ringue.
+- Efeitos e sons são procedurais e simples: não há pós-processamento, bloom, câmera lenta, trilha musical ou locução gravada. Os sons foram verificados com um duplo do Web Audio, não por audição; timbre e volume precisam de revisão real.
+- A narração acessível cobre eventos da partida, mas o jogo continua exigindo movimento corporal visível pela câmera; não há modo alternativo de controle.
 - A inferência `detectForVideo` é síncrona e ocorre na thread principal. O teto de frequência e o modelo Lite reduzem o custo, mas podem ocorrer pausas durante carregamento ou em CPUs fracas. Não há Worker implementado. O contrato do backend preserva uma fronteira para futura migração, que exigirá um protocolo assíncrono e transferência de frames.
 - 60 FPS de exibição e 20–30 inferências/s são objetivos, não resultados garantidos ou comprovados nesta máquina.
 - O filtro reduz tremores, adicionando atraso visual. Inferência usa uma única imagem monocular; profundidade e inclinação são aproximadas.
@@ -207,11 +225,11 @@ A prévia automática continua indisponível por uma permissão salva/política 
 2. **Robô 3D e espelhamento:** implementada; aparência confirmada pelo usuário, limitação frontal tratada na fase 3.
 3. **Motion engine e gestos:** implementada; calibração, guarda, esquivas, socos e correção frontal.
 4. **Animações híbridas:** implementada; clips, máscaras e transições suaves.
-5. **Arena e combate:** implementação atual para revisão; IA, contato, vida, defesa, rounds e resultados.
-6. **Polimento:** efeitos, som, acessibilidade e otimização.
+5. **Arena e combate:** implementada; IA, contato, vida, defesa, rounds e resultados.
+6. **Polimento:** implementação atual para revisão; efeitos de impacto, som procedural, acessibilidade e sugestão de qualidade.
 7. **Expansões:** somente mediante autorização futura.
 
-O desenvolvimento está interrompido ao final da fase 5 para revisão antes do commit. A fase 6 exige nova autorização. Nenhuma branch, commit ou push foi feito pelo agente. Sugestão de commit: `feat: add motion-controlled arena combat and rounds`.
+O desenvolvimento está interrompido ao final da fase 6 para revisão antes do commit. A fase 7 exige nova autorização. Sugestão de commit: `feat: add impact effects, procedural audio and accessibility polish`.
 
 ## Referências técnicas
 

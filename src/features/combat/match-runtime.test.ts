@@ -205,4 +205,31 @@ describe('capture and match bridge', () => {
     expect(prior.playerStats.attacks).toBe(0)
     expect(useMatchStore.getState().snapshot.playerStats.attacks).toBe(1)
   })
+
+  it('delivers presentation events once, in order, and isolates failing listeners', () => {
+    const received: string[] = []
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const failing = runtime.subscribe(() => { throw new Error('effect failure') })
+    const unsubscribe = runtime.subscribe((event) => received.push(event.type === 'countdown' ? `countdown:${event.value}` : event.type))
+    runtime.start('demo')
+    expect(received).toEqual(['countdown:3'])
+    advance(3.1, false)
+    expect(received).toEqual(['countdown:3', 'countdown:2', 'countdown:1', 'fight'])
+    expect(runtime.snapshot.phase).toBe('fighting')
+    failing()
+    unsubscribe()
+    advance(10, false)
+    expect(received).toHaveLength(4)
+    expect(console.error).toHaveBeenCalled()
+  })
+
+  it('emits no events for a rejected webcam start', () => {
+    const received: unknown[] = []
+    const unsubscribe = runtime.subscribe((event) => received.push(event))
+    useLabStore.setState({ session: { status: 'idle', delegate: null, error: null } })
+    expect(runtime.start('webcam')).toBe(false)
+    advance(1, false)
+    expect(received).toEqual([])
+    unsubscribe()
+  })
 })

@@ -1,10 +1,12 @@
 import { Component, memo, useEffect, useMemo, useRef, useState } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { BoxGeometry, Color, CylinderGeometry, GridHelper, MeshBasicMaterial, MeshStandardMaterial, RingGeometry } from 'three'
-import type { BufferGeometry, Material, Mesh } from 'three'
+import { AdditiveBlending, BoxGeometry, Color, CylinderGeometry, DoubleSide, GridHelper, Matrix4, MeshBasicMaterial, MeshStandardMaterial, OctahedronGeometry, RingGeometry, Vector3 } from 'three'
+import type { BufferGeometry, InstancedMesh, Material, Mesh } from 'three'
+import { CameraShake, ImpactParticles, ImpactPulses, impactFeedback } from '../../engine/effects/impact-effects'
 import { RIG_JOINTS } from '../../engine/motion/rig-controller'
 import { useRobotStore } from '../../stores/robot-store'
+import { useSettingsStore } from '../../stores/settings-store'
 import type { FighterFrame, FighterId } from '../../types/combat'
 import { matchRuntime } from '../combat/match-runtime'
 import { RobotModel } from '../robot/RobotModel'
@@ -14,6 +16,29 @@ import { ARENA_CAMERA_FOV, ARENA_CAMERA_TARGET, getArenaCameraPosition } from '.
 const TEAM_COLOR = { player: new Color('#5acbd5'), opponent: new Color('#ef995d') }
 const IMPACT_COLOR = new Color('#fff0c5')
 const FIGHTER_IDS = ['player', 'opponent'] as const
+const SPARK_CAPACITY = 64
+const PULSE_CAPACITY = 4
+const SPARK_COLORS = {
+  hit: [new Color('#ff5a1f'), new Color('#ffe2a0')],
+  blocked: [new Color('#2a8fc4'), new Color('#bff7ff')],
+} as const
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
+}
+
+/** Presentation-only state for one canvas. It reads combat events but never feeds back into the simulation. */
+function createArenaFeedback() {
+  const particles = new ImpactParticles(SPARK_CAPACITY)
+  const pulses = new ImpactPulses(PULSE_CAPACITY)
+  const shake = new CameraShake()
+  return {
+    particles, pulses, shake,
+    clear() { particles.clear(); pulses.clear(); shake.clear() },
+  }
+}
+
+type ArenaFeedback = ReturnType<typeof createArenaFeedback>
 
 function createArenaResources() {
   const geometries = {
@@ -23,6 +48,8 @@ function createArenaResources() {
     rim: new RingGeometry(0.96, 1, 8),
     centerRing: new RingGeometry(1, 1.012, 64),
     marker: new RingGeometry(0.54, 0.57, 48),
+    spark: new OctahedronGeometry(1, 0),
+    pulse: new RingGeometry(0.72, 1, 40),
   }
   const materials = {
     deck: new MeshStandardMaterial({ color: '#1b2b36', metalness: 0.6, roughness: 0.56 }),
@@ -35,17 +62,22 @@ function createArenaResources() {
     orange: new MeshBasicMaterial({ color: '#ce793f', toneMapped: false }),
     playerMarker: new MeshBasicMaterial({ color: TEAM_COLOR.player, transparent: true, opacity: 0.25, depthWrite: false, toneMapped: false }),
     opponentMarker: new MeshBasicMaterial({ color: TEAM_COLOR.opponent, transparent: true, opacity: 0.25, depthWrite: false, toneMapped: false }),
+    spark: new MeshBasicMaterial({ toneMapped: false }),
   }
+  const pulseMaterials = Array.from({ length: PULSE_CAPACITY }, () => new MeshBasicMaterial({
+    transparent: true, opacity: 0, depthWrite: false, blending: AdditiveBlending, side: DoubleSide, toneMapped: false,
+  }))
   const grid = new GridHelper(24, 24, '#213642', '#12222c')
   grid.position.set(0, -0.421, 0.6)
   let disposed = false
   return {
-    geometries, materials, grid,
+    geometries, materials, pulseMaterials, grid,
     dispose() {
       if (disposed) return
       disposed = true
       for (const geometry of Object.values(geometries)) geometry.dispose()
       for (const material of Object.values(materials)) material.dispose()
+      for (const material of pulseMaterials) material.dispose()
       grid.geometry.dispose()
       if (Array.isArray(grid.material)) for (const material of grid.material) material.dispose()
       else grid.material.dispose()
@@ -153,7 +185,89 @@ function ArenaFighters({ resources }: { resources: ArenaResources }) {
   </>
 }
 
-function ArenaScene({ light }: { light: boolean }) {
+const sparkMatrix = new Matrix4()
+const sparkColor = new Color()
+
+function ArenaEffects({ resources, feedback }: { resources: ArenaResources; feedback: ArenaFeedback }) {
+  const sparks = useRef<InstancedMesh>(null)
+  const pulses = useRef<(Mesh | null)[]>([])
+
+  useEffect(() => {
+    const mesh = sparks.current
+    if (!mesh) return
+    // Allocates the per-instance colour buffer once; only `count` instances are drawn.
+    for (let index = 0; index < SPARK_CAPACITY; index++) mesh.setColorAt(index, sparkColor.set(0, 0, 0))
+    mesh.count = 0
+  }, [])
+
+  useEffect(() => matchRuntime.subscribe((event) => {
+    if (event.type !== 'impact') return
+    const settings = useSettingsStore.getState()
+    const reduced = prefersReducedMotion()
+    const response = impactFeedback(event, matchRuntime.snapshot.mode)
+    const [x, y, z] = event.position
+    if (settings.effectsEnabled && response.burst) {
+      feedback.particles.burst(response.burst, x, y, z, response.direction, response.amount * (reduced ? 0.5 : 1))
+      feedback.pulses.spawn(response.burst, x, y, z)
+    }
+    if (settings.shakeEnabled && !reduced) feedback.shake.add(response.shake)
+  }), [feedback])
+
+  useFrame(({ camera }, elapsed) => {
+    const snapshot = matchRuntime.snapshot
+    if (snapshot.phase === 'ready') feedback.clear()
+    // Paused matches freeze their sparks with the rest of the scene.
+    const dt = snapshot.pauseReason === null ? Math.max(0, Math.min(Number.isFinite(elapsed) ? elapsed : 0, 0.1)) : 0
+    const { particles } = feedback
+    particles.step(dt)
+    feedback.pulses.step(dt)
+    const mesh = sparks.current
+    if (mesh) {
+      for (let index = 0; index < particles.count; index++) {
+        const fade = particles.fade(index)
+        const size = (particles.kind[index] === 0 ? 0.034 : 0.026) * (0.35 + fade * 0.65)
+        sparkMatrix.makeScale(size, size * 1.6, size)
+        sparkMatrix.setPosition(particles.position[index * 3], particles.position[index * 3 + 1], particles.position[index * 3 + 2])
+        mesh.setMatrixAt(index, sparkMatrix)
+        const [end, start] = SPARK_COLORS[particles.kind[index] === 0 ? 'hit' : 'blocked']
+        mesh.setColorAt(index, sparkColor.copy(end).lerp(start, fade))
+      }
+      mesh.count = particles.count
+      mesh.instanceMatrix.needsUpdate = true
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+    }
+    feedback.pulses.pulses.forEach((pulse, index) => {
+      const ring = pulses.current[index]
+      if (!ring) return
+      ring.visible = pulse.active
+      if (!pulse.active) return
+      const progress = feedback.pulses.progress(pulse)
+      const blocked = pulse.kind === 'blocked'
+      ring.position.set(pulse.x, pulse.y, pulse.z)
+      ring.quaternion.copy(camera.quaternion)
+      ring.scale.setScalar(blocked ? 0.2 + progress * 0.36 : 0.08 + progress * 0.3)
+      const material = resources.pulseMaterials[index]
+      material.color.copy(blocked ? SPARK_COLORS.blocked[1] : SPARK_COLORS.hit[1])
+      material.opacity = (1 - progress) * (blocked ? 0.8 : 0.95)
+    })
+  })
+
+  return <>
+    <instancedMesh ref={sparks} args={[resources.geometries.spark, resources.materials.spark, SPARK_CAPACITY]} frustumCulled={false} />
+    {resources.pulseMaterials.map((material, index) => <mesh key={index} ref={(mesh) => { pulses.current[index] = mesh }}
+      geometry={resources.geometries.pulse} material={material} visible={false} renderOrder={2} />)}
+  </>
+}
+
+function ArenaWorld({ light }: { light: boolean }) {
+  const feedback = useMemo(createArenaFeedback, [])
+  return <>
+    <ArenaScene light={light} feedback={feedback} />
+    <ArenaCamera shake={feedback.shake} />
+  </>
+}
+
+function ArenaScene({ light, feedback }: { light: boolean; feedback: ArenaFeedback }) {
   const resources = useMemo(createArenaResources, [])
   useArenaDisposal(resources)
   const { geometries: g, materials: m } = resources
@@ -189,19 +303,32 @@ function ArenaScene({ light }: { light: boolean }) {
         <StagePart geometry={g.box} material={m.cyan} position={[3.197, 2.05, z]} scale={[0.016, 0.4, 0.035]} />
       </group>)}
       <ArenaFighters resources={resources} />
+      <ArenaEffects resources={resources} feedback={feedback} />
     </group>
   </>
 }
 
-function ArenaCamera() {
+function ArenaCamera({ shake }: { shake: CameraShake }) {
   const camera = useThree((state) => state.camera)
   const width = useThree((state) => state.size.width)
   const height = useThree((state) => state.size.height)
+  const base = useRef(new Vector3())
+  const offset = useRef({ x: 0, y: 0, z: 0 })
   useEffect(() => {
-    camera.position.fromArray(getArenaCameraPosition(width / height))
+    base.current.fromArray(getArenaCameraPosition(width / height))
+    camera.position.copy(base.current)
     camera.lookAt(...ARENA_CAMERA_TARGET)
     camera.updateProjectionMatrix()
   }, [camera, width, height])
+  useFrame((_state, elapsed) => {
+    const paused = matchRuntime.snapshot.pauseReason !== null
+    if (!paused) shake.step(elapsed)
+    if (shake.trauma <= 0 && offset.current.x === 0 && offset.current.y === 0 && offset.current.z === 0) return
+    if (shake.trauma <= 0) offset.current = { x: 0, y: 0, z: 0 }
+    else shake.offset(offset.current)
+    camera.position.set(base.current.x + offset.current.x, base.current.y + offset.current.y, base.current.z + offset.current.z)
+    camera.lookAt(...ARENA_CAMERA_TARGET)
+  })
   return null
 }
 
@@ -269,8 +396,7 @@ function ArenaCanvas() {
           gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
           onCreated={({ gl }) => setCanvas(gl.domElement)}
           fallback={<ArenaFailure>Ative a aceleração gráfica ou use um navegador com WebGL 2. O combate está pausado.</ArenaFailure>}>
-          <ArenaScene light={quality === 'light'} />
-          <ArenaCamera />
+          <ArenaWorld light={quality === 'light'} />
         </Canvas>}
     </ArenaBoundary>
   </div>

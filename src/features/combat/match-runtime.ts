@@ -3,7 +3,7 @@ import { RigController } from '../../engine/motion/rig-controller'
 import { useLabStore } from '../../stores/lab-store'
 import { useMatchStore } from '../../stores/match-store'
 import { useRobotStore } from '../../stores/robot-store'
-import type { CombatInput, MatchMode } from '../../types/combat'
+import type { CombatEvent, CombatInput, MatchMode } from '../../types/combat'
 import { combatMotionRuntime } from '../motion-tracking/combat-motion-runtime'
 import { readPose, readPoseAspectRatio } from '../motion-tracking/pose-stream'
 import { readAnimationGeneration, readAnimationGesture } from '../robot/animation-signals'
@@ -13,11 +13,18 @@ export class MatchRuntime {
   private readonly engine = new CombatEngine()
   private readonly rig = new RigController()
   private nextPublication = 0
+  private readonly listeners = new Set<(event: CombatEvent) => void>()
 
   constructor(private readonly clock: () => number = () => performance.now()) {}
 
   get fighters() { return this.engine.fighters }
   get snapshot() { return this.engine.snapshot }
+
+  /** Presentation listeners (sound, effects, announcements) receive events synchronously after each step. */
+  subscribe(listener: (event: CombatEvent) => void): () => void {
+    this.listeners.add(listener)
+    return () => { this.listeners.delete(listener) }
+  }
 
   start(mode: MatchMode): boolean {
     const input = this.input(0)
@@ -26,6 +33,7 @@ export class MatchRuntime {
     const started = this.engine.start(mode, input)
     if (started && mode === 'demo') useRobotStore.getState().setMode('demo')
     this.publish(this.input(0))
+    this.dispatch()
     return started
   }
 
@@ -58,6 +66,17 @@ export class MatchRuntime {
       || previous.opponentCue !== this.opponentCue
       || previous.snapshot.playerHealth !== snapshot.playerHealth || previous.snapshot.opponentHealth !== snapshot.opponentHealth
       || previous.snapshot.lastImpact?.id !== snapshot.lastImpact?.id) this.publish(input)
+    this.dispatch()
+  }
+
+  private dispatch(): void {
+    const events = this.engine.drainEvents()
+    for (const event of events) {
+      for (const listener of this.listeners) {
+        // A failing presentation layer must never interrupt the simulation.
+        try { listener(event) } catch (error) { console.error('Falha ao apresentar evento de combate:', error) }
+      }
+    }
   }
 
   private input(elapsed: number): CombatInput {

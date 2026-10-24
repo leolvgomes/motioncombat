@@ -47,13 +47,13 @@ function Laboratory() {
           <button className={`rail-item ${view === 'arena' ? 'is-current' : ''}`} type="button" onClick={() => selectView('arena')} aria-current={view === 'arena' ? 'page' : undefined} title="Abrir arena de combate"><Swords size={20} /><span className="sr-only">Abrir arena de combate</span></button>
         </nav>
         <a className="rail-item rail-help" href="#guia" title="Guia de início"><CircleHelp size={20} /><span className="sr-only">Guia de início</span></a>
-        <span className="rail-version">0.5</span>
+        <span className="rail-version">0.6</span>
       </aside>
 
       <div className="workspace">
         <header className="global-header">
           <Brand />
-          <div className="header-product"><span className="header-divider" /><span>{view === 'arena' ? 'COMBAT ARENA' : 'MOTION LAB'}</span><span className="version-tag">v0.5.0</span></div>
+          <div className="header-product"><span className="header-divider" /><span>{view === 'arena' ? 'COMBAT ARENA' : 'MOTION LAB'}</span><span className="version-tag">v0.6.0</span></div>
           <div className="environment-status"><span className="environment-dot" /><span>SESSÃO LOCAL</span><span className="environment-separator" /><Monitor size={13} /><span>NO NAVEGADOR</span></div>
         </header>
 
@@ -61,7 +61,7 @@ function Laboratory() {
           <div className="breadcrumbs" aria-label="Localização"><span>WORKSPACE</span><ChevronRight size={11} /><span>{view === 'arena' ? 'COMBAT ARENA' : 'MOTION LAB'}</span></div>
           <section className="workspace-intro" aria-labelledby="workspace-title">
             <div><div className="section-eyebrow"><span />SEU CORPO. SEU CONTROLE.</div><h1 id="workspace-title">{view === 'arena' ? 'Seu lugar no ringue' : 'Laboratório de movimento'}<span className="title-period">.</span></h1><p>{view === 'arena' ? 'O combate começa com você. Sincronize, assuma a guarda e enfrente VULCAN-07.' : 'Explore o espelhamento, a calibração e as animações de cada golpe.'}</p></div>
-            <div className="phase-chip"><span className="phase-number">05</span><div><span>FASE ATUAL</span><strong>Arena & combate</strong></div></div>
+            <div className="phase-chip"><span className="phase-number">06</span><div><span>FASE ATUAL</span><strong>Polimento</strong></div></div>
           </section>
 
           <div className="workspace-view-tabs" role="tablist" aria-label="Área de trabalho">
@@ -83,7 +83,7 @@ function Laboratory() {
             <div className="guide-lighting"><span className="lighting-symbol" aria-hidden="true">✳</span>Uma boa iluminação e um fundo livre ajudam o rastreamento.<a href="#laboratorio">Tudo pronto <ArrowUpRight size={13} /></a></div>
           </section>
 
-          <footer className="workspace-footer"><p><ShieldCheck size={14} /> Seu movimento fica com você.<span>Processamento local, sem gravação ou envio de vídeo.</span></p><div className="phase-roadmap" aria-label="Progresso das fases"><span className="is-complete"><Check size={10} />04 <span>Animações</span></span><ChevronRight size={11} /><span className="is-active"><span className="roadmap-dot" />05 <span>Combate</span></span><ChevronRight size={11} /><span><LockKeyhole size={10} />06 <span>Polimento</span></span></div></footer>
+          <footer className="workspace-footer"><p><ShieldCheck size={14} /> Seu movimento fica com você.<span>Processamento local, sem gravação ou envio de vídeo.</span></p><div className="phase-roadmap" aria-label="Progresso das fases"><span className="is-complete"><Check size={10} />05 <span>Combate</span></span><ChevronRight size={11} /><span className="is-active"><span className="roadmap-dot" />06 <span>Polimento</span></span><ChevronRight size={11} /><span><LockKeyhole size={10} />07 <span>Expansões</span></span></div></footer>
         </main>
       </div>
     </div>

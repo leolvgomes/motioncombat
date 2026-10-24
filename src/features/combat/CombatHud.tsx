@@ -19,9 +19,11 @@ function FighterHealth({ name, label, health, wins, opponent = false }: {
   opponent?: boolean
 }) {
   const value = healthValue(health)
-  return <div className={`combat-fighter-hud ${opponent ? 'is-opponent' : ''}`}>
-    <div className="combat-fighter-heading"><div><span>{label}</span><strong>{name}</strong></div><span className="combat-health-value">{Math.ceil(value)}<small>/ 100</small></span></div>
-    <div className="combat-health-track" role="meter" aria-label={`Integridade de ${name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={value}><span style={{ transform: `scaleX(${value / 100})` }} /></div>
+  // Critical state is also spelled out, so it never depends on colour alone.
+  const critical = value > 0 && value <= 25
+  return <div className={`combat-fighter-hud ${opponent ? 'is-opponent' : ''} ${critical ? 'is-critical' : ''}`}>
+    <div className="combat-fighter-heading"><div><span>{label}</span><strong>{name}</strong></div><span className="combat-health-value">{critical && <em>CRÍTICO</em>}{Math.ceil(value)}<small>/ 100</small></span></div>
+    <div className="combat-health-track" role="meter" aria-label={`Integridade de ${name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={value} aria-valuetext={`${Math.ceil(value)} de 100${critical ? ', crítico' : ''}`}><span style={{ transform: `scaleX(${value / 100})` }} /></div>
     <div className="combat-round-markers" aria-label={`${name}: ${wins} ${wins === 1 ? 'round vencido' : 'rounds vencidos'}`}><span className={wins >= 1 ? 'is-won' : ''} /><span className={wins >= 2 ? 'is-won' : ''} /><small>ROUNDS</small></div>
   </div>
 }

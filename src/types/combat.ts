@@ -39,6 +39,16 @@ export interface ImpactEvent {
   readonly damage: number
 }
 
+/** Discrete simulation events for presentation layers (sound, effects, announcements). Never fed back into rules. */
+export type CombatEvent =
+  | { readonly type: 'countdown'; readonly round: number; readonly value: number }
+  | { readonly type: 'fight'; readonly round: number }
+  | { readonly type: 'attack'; readonly fighter: FighterId; readonly side: AttackSide }
+  | { readonly type: 'telegraph'; readonly fighter: FighterId; readonly side: AttackSide }
+  | { readonly type: 'impact'; readonly impact: ImpactEvent; readonly position: readonly [number, number, number]; readonly defenderHealth: number }
+  | { readonly type: 'round-end'; readonly round: number; readonly winner: MatchWinner; readonly knockout: boolean }
+  | { readonly type: 'match-end'; readonly winner: MatchWinner; readonly mode: MatchMode }
+
 export interface CombatSnapshot {
   readonly mode: MatchMode
   readonly phase: MatchPhase
