@@ -1,6 +1,6 @@
 # STEEL SYNC — Motion Combat
 
-Laboratório de movimento para um futuro jogo web de combate robótico controlado pelo corpo. As **fases 1 a 4** implementam webcam, rastreamento corporal, robô 3D procedural, calibração, reconhecimento inicial de gestos e animações híbridas de socos retos. Há demonstração do rig e dos ataques sem câmera. Arena, adversário e combate ainda não estão implementados.
+Jogo web de combate robótico controlado pelo corpo. As **fases 1 a 5** implementam webcam, rastreamento corporal, robôs 3D procedurais, calibração, gestos, animações híbridas e uma partida local contra IA, com arena, hitboxes, vida, defesa, rounds e resultado. O laboratório de movimento continua disponível; uma demonstração IA × IA permite observar o combate sem câmera.
 
 ## Stack
 
@@ -14,9 +14,9 @@ Laboratório de movimento para um futuro jogo web de combate robótico controlad
 | Drei 10 | Grade de referência da plataforma de teste |
 | Zustand 5 | Configurações, estado da sessão e diagnóstico reduzido |
 | Lucide React | Ícones vetoriais locais |
-| Vitest 5 | Filtros, câmera, rig, calibração, gestos, clips, transições e integração |
+| Vitest 5 | Câmera, rig, gestos, animações, geometria de contato, regras e integração |
 
-Não há física, backend, upload, gravação de vídeo, analytics ou persistência de landmarks. A plataforma de teste 3D não implementa arena ou combate.
+Não há motor de física, backend, upload, gravação de vídeo, analytics ou persistência de landmarks. O combate usa passos fixos e volumes geométricos simples; não necessita de Rapier nesta fase.
 
 ## Requisitos
 
@@ -25,7 +25,7 @@ Não há física, backend, upload, gravação de vídeo, analytics ou persistên
 - Acesso à internet na instalação para o registro npm e o modelo oficial do Google. Depois da preparação, todos os recursos do rastreamento são servidos localmente.
 - Câmera exige uma origem segura: `localhost`, `127.0.0.1` ou HTTPS. Um endereço HTTP na rede local geralmente não permite a webcam.
 
-Ambiente de build/testes verificado: Windows, Node 24.14.0 e npm 11.9.0. A captura fornecida pelo usuário identificou dificuldade em socos frontais; a fase 3 removeu a restrição artificial de profundidade do solver. A fase 4 acrescenta animações após o reconhecimento. Fluidez, gestos e resposta visual precisam de revisão com webcam no hardware do jogador.
+Ambiente de build/testes: Windows, Node 24.14.0 e npm 11.9.0. A fase 3 removeu a restrição artificial de profundidade identificada pelo usuário; a fase 4 acrescentou clips próprios de soco. Fluidez, gestos, balanceamento e resposta visual do combate precisam de revisão no hardware do jogador.
 
 ## Instalação e execução
 
@@ -51,9 +51,21 @@ npm run preview     # Servir o build localmente
 
 Execute `setup:tracking` **antes do build** para incluir o modelo e WASM em `dist/`. O build e a prévia são estáticos, sem backend.
 
-## Como usar e revisar
+## Jogar na arena
 
-1. Abra o laboratório. A câmera permanece desligada e as métricas aparecem como `—`.
+1. A aplicação abre na visão **Arena**, com câmera desligada. Para conhecer a partida sem webcam, escolha **Assistir demonstração**: os dois robôs são controlados pela IA, com fonte programada explicitamente identificada. Esse modo troca a fonte de movimento e interrompe a câmera.
+2. Para jogar, clique **Iniciar câmera** no painel de captura e conclua a calibração de postura neutra/guarda no painel **Do movimento ao gesto**. O botão de combate fica disponível somente com câmera, calibração e pose atual válidas.
+3. Inicie o combate e aguarde a contagem. Assuma a guarda, faça socos retos e retorne à guarda entre os golpes. Não há tecla ou botão para atacar. Guarda reduz o dano; inclinar o tronco desloca o robô para esquivar. A aproximação do adversário é automática.
+4. Acompanhe vida, tempo e placar no HUD. O adversário sinaliza a preparação antes de socar. Um soco precisa alcançar os volumes do corpo/cabeça durante a janela ativa; ataques fora de alcance não descontam vida.
+5. A partida tem até três rounds de 45 segundos. Duas vitórias encerram antes do terceiro; nocaute encerra o round, e o tempo compara a vida restante. Empates são possíveis. A vida é restaurada no início de cada round; estatísticas acumulam na partida.
+6. **Pausar**, sair do enquadramento, recalibrar, trocar o espelho, ocultar a página ou abrir o laboratório interrompe a partida. Ela requer **Retomar** após recuperar uma fonte válida; nenhum ataque antigo fica enfileirado. A página oculta também desliga a câmera, exigindo novo início e calibração.
+7. Após o resultado, inicie outra partida ou volte à preparação. A demonstração utiliza as mesmas regras de contato, dano e rounds, com dois controladores programados.
+
+A arena e o laboratório alternam a cena 3D; somente um canvas 3D fica montado. Captura e calibração continuam montadas ao trocar de visão. Os ajustes de duração/amplitude do laboratório não alteram as regras balanceadas da partida.
+
+## Laboratório e revisão do tracking
+
+1. Selecione **Laboratório**. A câmera permanece desligada até sua interação, e métricas indisponíveis aparecem como `—`.
 2. Selecione HD 720p ou o modo leve 480p antes da conexão. São resoluções solicitadas; a câmera pode negociar outra resolução, mostrada no diagnóstico.
 3. Clique **Iniciar câmera** e permita o acesso no navegador. Nenhum áudio é solicitado.
 4. Aguarde o carregamento do motor e modelo. É possível cancelar a conexão em qualquer etapa.
@@ -98,6 +110,13 @@ Se a permissão foi negada, libere-a nas configurações do site no navegador. S
 - Máquina de estados visuais independente do reconhecimento: repouso, espelhamento, guarda, esquiva, socos e retorno após interrupção. Guarda e esquiva mantêm a pose corporal, sem clips adicionais.
 - Entrada e saída graduais, retorno à pose atual, parâmetros fixados no início do golpe e janela técnica sincronizada com o tempo do clip. A perda da fonte, recalibração, troca de espelho/fonte ou desativação fecha imediatamente a janela e desfaz a animação suavemente.
 - Comparação entre animação e espelhamento direto, parâmetros de duração/amplitude, demonstração de socos e diagnóstico de transição.
+- Arena industrial original com dois robôs: ATLAS-01 (ciano) e VULCAN-07 (cobre/laranja), câmera responsiva e qualidade Leve/Equilibrada.
+- Adversário com máquina de estados: aproximação, espera, guarda, preparação visível, ataque, recuo e reação a dano. O HUD avisa a preparação e o lado do soco antes da extensão.
+- Contato geométrico dos punhos com corpo/cabeça, uma resolução por ataque, guarda com dano reduzido e esquiva lateral.
+- Vida, atordoamento breve, contagem inicial, rounds por nocaute/tempo, placar, vitória/derrota/empate e estatísticas da partida.
+- Transição de 350 ms da pose atual para vitória/derrota. Após encerrar a partida, somente essa finalização visual avança; placar, dano, IA e relógio permanecem congelados.
+- Pausa persistente na perda de tracking ou troca de visão, recuperação explícita e descarte de ataques durante pausa/contagem.
+- Demonstração IA × IA identificada, sem fabricar landmarks ou indicadores de câmera.
 
 ## Arquitetura
 
@@ -109,25 +128,30 @@ src/
 ├── features/
 │   ├── camera/                     # Acesso à webcam e painel
 │   ├── motion-tracking/            # MediaPipe, sessão, overlay e stream de pose
-│   └── robot/                      # Modelo, recursos, enquadramento, cena e painel
+│   ├── robot/                      # Modelo, recursos e laboratório do rig
+│   ├── arena/                      # Cena do ringue, dois rigs e câmera
+│   └── combat/                     # Ponte de captura/partida, HUD e controles
 ├── engine/
 │   ├── motion/                    # Filtros, retargeting, calibração e velocidades
 │   ├── gestures/                  # Reconhecimento geométrico e temporal, sem animação
-│   └── animation/                 # Clips de soco e controlador de blending/estados
-├── stores/                        # Configurações da câmera/robô/animação e diagnóstico
-└── types/                         # Landmarks, rotações, gestos e contratos de clips
+│   ├── animation/                 # Clips de soco e controlador de blending/estados
+│   └── combat/                    # Simulação, IA e geometria de contato
+├── stores/                        # Configurações e snapshots reduzidos da UI
+└── types/                         # Landmarks, rig, clips e contratos de combate
 public/mediapipe/                   # Recursos gerados, ignorados pelo Git
 ```
 
 `PoseBackend` isola o MediaPipe. `TrackingSession` controla câmera, modelo e agendadores. `PoseProcessor` não conhece React, câmera ou o motor de inferência. `pose-stream` disponibiliza apenas a última amostra, sem uma fila nem assinaturas React por frame.
 
-`retargetPose` converte essa amostra em `RigPose`; `RigController` seleciona a fonte, verifica sua idade e interpola quaternions reutilizados. O renderizador aplica as rotações diretamente aos grupos do `RobotRig`. Os segmentos dos braços apontam para -Y local; o robô olha para +Z e sua esquerda anatômica fica em +X. Ombros herdam tronco, cotovelos herdam ombros e punhos herdam cotovelos. O adaptador de grupos permite substituir o modelo por um GLB com esqueleto no futuro, ainda sem implementar lógica de combate.
+`retargetPose` converte essa amostra em `RigPose`; `RigController` seleciona a fonte, verifica sua idade e interpola quaternions reutilizados. O renderizador aplica as rotações diretamente aos grupos do `RobotRig`. Os segmentos dos braços apontam para -Y local; o robô olha para +Z e sua esquerda anatômica fica em +X. Ombros herdam tronco, cotovelos herdam ombros e punhos herdam cotovelos. O adaptador de grupos permite substituir o modelo por um GLB com esqueleto no futuro.
 
 `MotionCalibrator` e `MotionFeatureExtractor` são módulos puros que recebem poses tipadas. `GestureEngine` recebe somente características normalizadas e contexto da calibração. `combat-motion-runtime` conecta esses módulos às amostras reais e publica snapshots para a interface; eventos semânticos são publicados imediatamente, enquanto métricas usam a cadência reduzida do diagnóstico.
 
-`animation-signals` conserva somente o último pulso de soco, com sequência e geração da sessão. Eventos de postura não sobrescrevem esse pulso. `HybridAnimationController` recebe as rotações base do `RigController`, o contexto e o pulso; sua saída é aplicada ao rig no mesmo frame. Clips não conhecem MediaPipe, React ou regras de dano. A separação permite trocar o rig ou acrescentar hitboxes posteriormente.
+`animation-signals` conserva somente o último pulso de soco, com sequência e geração da sessão. Eventos de postura não sobrescrevem esse pulso. No laboratório, `HybridAnimationController` recebe rotações base, contexto e pulso; sua saída é aplicada ao rig no mesmo frame. Clips não conhecem MediaPipe, React ou regras de dano.
 
 Um ataque tem prioridade sobre guarda/esquiva e bloqueia novos ataques até terminar. Pulsos repetidos, anteriores à montagem da cena, com mais de 250 ms, sem calibração ou fonte válida não iniciam animação. Parar a câmera, recalibrar e trocar para demonstração invalidam a geração. Desativar a camada não enfileira golpes para quando ela for reativada.
+
+Na arena, `MatchRuntime` recebe a captura real, verifica a fonte e entrega `CombatInput` ao `CombatEngine`. O motor controla o tempo dos clips, IA, contato, vida e rounds. `FighterFrame` contém as mesmas transformações usadas para calcular os contatos e desenhar os robôs. `ArenaCanvas` não decide dano; o HUD recebe somente cópias dos snapshots, sem transformar a simulação em estado React.
 
 ### Frequências e processamento
 
@@ -147,6 +171,7 @@ Um ataque tem prioridade sobre guarda/esquiva e bloqueia novos ataques até term
 - Socos exigem profundidade confiável no próprio braço, retração anterior, extensão crescente e velocidade predominante para a frente. Intervalo entre socos do mesmo braço: 500 ms, com nova retração obrigatória. A janela aceita trajetórias de 60–350 ms; guarda usa permanência de 150 ms e esquiva de 100 ms, com limiares diferentes de entrada/saída.
 - Um clip padrão dura **550 ms**, escalável de 0,75× a 1,35×. A máscara aumenta gradualmente até o impacto em 130 ms; a janela técnica vai de 130 ms (inclusivo) a 210 ms (exclusivo), escalada pela duração. O recolhimento leva o peso a zero sobre o tracking atual. Interrupções desfazem o peso em **180 ms** e fecham a janela imediatamente. Os tempos são editáveis em `combat-clips.ts`; não são estimativas da webcam.
 - Keyframes e opções são preparados uma vez por ataque. O sampler, a saída do controlador e os quaternions são reutilizados no loop; a UI recebe snapshots a cada 125 ms e nas mudanças de estado/fase/janela, sem estado React por frame.
+- O combate usa simulação fixa a 60 Hz, separada da inferência. O tempo acumulado por frame é limitado para evitar recuperação longa ao voltar de uma aba parada. Frames de ataque e volumes de contato são calculados juntos; a busca varrida do punho reduz a chance de atravessar o alvo entre amostras. Pausa não avança relógio, IA ou dano.
 
 ### Testes e validação
 
@@ -154,11 +179,15 @@ Os testes unitários exercitam validação de landmarks, filtros em taxas difere
 
 A verificação da fase 4 inclui a cadeia de landmarks sintéticos → calibração → velocidades → gesto → pulso → rig → animação, com um único ataque e retorno ao tracking atual. Também cobre cinemática dos clips, máscaras, espelhamento, prioridade, cancelamento, pausa, duração, amplitude, repetição, eventos antigos e enquadramento das duas vistas. As poses de teste nunca alimentam a câmera da aplicação. Os resultados executados estão no [relatório da fase 4](docs/phase-4-review.md).
 
+Os testes da fase 5 verificam a geometria de contato, regras, IA, pausa/recuperação, rounds e a ponte entre captura e partida. O inventário das alterações e os resultados executados constam no [relatório da fase 5](docs/phase-5-review.md).
+
 A prévia automática continua indisponível por uma permissão salva/política do navegador que bloqueou a origem local anteriormente, inclusive após autorização do usuário. Nesta fase não houve nova tentativa de contornar esse bloqueio. A aparência das animações, a resposta com webcam e o desempenho permanecem **pendentes de revisão real**. A demonstração é identificada como programada e não preenche os indicadores da webcam com dados artificiais. O [relatório da fase 3](docs/phase-3-review.md) preserva o histórico da correção frontal.
 
 ## Limitações atuais
 
-- Fases 1 a 4: sem hooks/uppercuts/combos, arena, hitboxes, dano, rounds ou IA. A janela técnica é apenas um marcador temporal; não representa colisão ou acerto. Não há múltiplos ataques simultâneos nem fila de golpes.
+- Fases 1 a 5: somente socos retos, sem hook/uppercut/especial/combos. Não há fila de golpes nem ataques simultâneos do mesmo robô. Na arena os dois lutadores podem atacar ao mesmo tempo; a resolução considera o contato de cada um.
+- Hitboxes são aproximações geométricas de cabeça/corpo e punhos, sem física de contato entre peças ou IK para alcançar um alvo. A IA e o balanceamento são iniciais; os rounds e os resultados funcionam localmente, sem persistência.
+- Efeitos de impacto avançados, partículas e som ficam para a fase 6. O feedback atual usa vida, mensagens e um marcador visual de dano no ringue.
 - A inferência `detectForVideo` é síncrona e ocorre na thread principal. O teto de frequência e o modelo Lite reduzem o custo, mas podem ocorrer pausas durante carregamento ou em CPUs fracas. Não há Worker implementado. O contrato do backend preserva uma fronteira para futura migração, que exigirá um protocolo assíncrono e transferência de frames.
 - 60 FPS de exibição e 20–30 inferências/s são objetivos, não resultados garantidos ou comprovados nesta máquina.
 - O filtro reduz tremores, adicionando atraso visual. Inferência usa uma única imagem monocular; profundidade e inclinação são aproximadas.
@@ -177,12 +206,12 @@ A prévia automática continua indisponível por uma permissão salva/política 
 1. **Fundação e motion tracking:** implementada; funcionamento dos braços confirmado pelo usuário.
 2. **Robô 3D e espelhamento:** implementada; aparência confirmada pelo usuário, limitação frontal tratada na fase 3.
 3. **Motion engine e gestos:** implementada; calibração, guarda, esquivas, socos e correção frontal.
-4. **Animações híbridas:** implementação atual para revisão; clips, máscaras e transições suaves.
-5. **Arena e combate:** adversário, hitboxes, dano e rounds.
+4. **Animações híbridas:** implementada; clips, máscaras e transições suaves.
+5. **Arena e combate:** implementação atual para revisão; IA, contato, vida, defesa, rounds e resultados.
 6. **Polimento:** efeitos, som, acessibilidade e otimização.
 7. **Expansões:** somente mediante autorização futura.
 
-O desenvolvimento está interrompido ao final da fase 4 para revisão. A fase 5 exige nova autorização. Nenhuma branch, commit ou push foi feito pelo agente. Sugestão de commit, após autorização: `feat: blend authored punches with live body tracking`.
+O desenvolvimento está interrompido ao final da fase 5 para revisão antes do commit. A fase 6 exige nova autorização. Nenhuma branch, commit ou push foi feito pelo agente. Sugestão de commit: `feat: add motion-controlled arena combat and rounds`.
 
 ## Referências técnicas
 

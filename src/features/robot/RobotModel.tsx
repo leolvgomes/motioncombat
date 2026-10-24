@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import type { RefObject } from 'react'
 import type { BufferGeometry, Group, Material } from 'three'
 import { createRobotResources } from './robot-resources'
-import type { RobotResources } from './robot-resources'
+import type { RobotResources, RobotVariant } from './robot-resources'
 
 /** Local rest axes point down -Y; +Z is forward and anatomical left is +X. */
 export interface RobotRig {
@@ -103,10 +103,10 @@ function Leg({ side, resources: { geometries: g, materials: m }, hipRef, kneeRef
 }
 
 /** A replaceable, original procedural rig. Root at floor 0; torso pivot at y=1.20. */
-export function RobotModel({ rigRef }: { rigRef: RefObject<RobotRig | null> }) {
-  const resources = useMemo(createRobotResources, [])
+export function RobotModel({ rigRef, variant = 'player' }: { rigRef: RefObject<RobotRig | null>; variant?: RobotVariant }) {
+  const resources = useMemo(() => createRobotResources(variant), [variant])
   const { geometries: g, materials: m } = resources
-  const pendingDisposal = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingDisposals = useRef(new Map<RobotResources, ReturnType<typeof setTimeout>>())
   const root = useRef<Group>(null)
   const torso = useRef<Group>(null)
   const head = useRef<Group>(null)
@@ -138,12 +138,15 @@ export function RobotModel({ rigRef }: { rigRef: RefObject<RobotRig | null> }) {
 
   useEffect(() => {
     // React StrictMode replays effect setup/cleanup. Cancel the provisional disposal on replay.
-    if (pendingDisposal.current !== null) clearTimeout(pendingDisposal.current)
+    const disposals = pendingDisposals.current
+    const pending = disposals.get(resources)
+    if (pending !== undefined) { clearTimeout(pending); disposals.delete(resources) }
     return () => {
-      pendingDisposal.current = setTimeout(() => {
+      const timer = setTimeout(() => {
         resources.dispose()
-        pendingDisposal.current = null
+        disposals.delete(resources)
       }, 0)
+      disposals.set(resources, timer)
     }
   }, [resources])
 

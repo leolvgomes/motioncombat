@@ -1,4 +1,6 @@
 import { ArrowUpRight, Bot, Camera, Check, ChevronRight, CircleHelp, Clock3, Focus, Layers3, LockKeyhole, Monitor, MoveUpRight, ScanLine, ShieldCheck, Swords } from 'lucide-react'
+import { useState } from 'react'
+import type { KeyboardEvent } from 'react'
 import { Brand } from '../components/ui/Brand'
 import { CameraPanel } from '../features/camera/CameraPanel'
 import { DiagnosticsPanel } from '../features/motion-tracking/DiagnosticsPanel'
@@ -6,48 +8,71 @@ import { RobotPanel } from '../features/robot/RobotPanel'
 import { ErrorBoundary } from './ErrorBoundary'
 import { CombatMotionPanel } from '../features/motion-tracking/CombatMotionPanel'
 import { HybridAnimationPanel } from '../features/robot/HybridAnimationPanel'
+import { CombatPanel } from '../features/combat/CombatPanel'
+import { matchRuntime } from '../features/combat/match-runtime'
 
 const guideSteps = [
-  { number: '01', Icon: Camera, title: 'Conecte e calibre', description: 'Inicie a câmera e calibre sua postura neutra e a guarda, com os braços visíveis.' },
-  { number: '02', Icon: Focus, title: 'Faça um soco controlado', description: 'Assuma a guarda, estenda um braço à frente e observe o golpe próprio do robô.' },
-  { number: '03', Icon: MoveUpRight, title: 'Acompanhe o retorno', description: 'Após o golpe, o robô volta ao seu corpo. Sem webcam, explore a sequência de socos na demonstração.' },
+  { number: '01', Icon: Camera, title: 'Conecte e calibre', description: 'Para controlar ATLAS-01, ative a webcam e calibre sua postura neutra e a guarda.' },
+  { number: '02', Icon: Focus, title: 'Assuma sua guarda', description: 'Mantenha braços e tronco visíveis. Faça um soco de cada vez e retorne à guarda.' },
+  { number: '03', Icon: MoveUpRight, title: 'Entre no ringue', description: 'Inicie o combate com seus movimentos. Sem webcam, assista à demonstração entre duas IAs.' },
 ]
 
 function Laboratory() {
+  const [view, setView] = useState<'arena' | 'lab'>('arena')
+  const selectView = (next: 'arena' | 'lab') => {
+    if (next === view) return
+    if (view === 'arena') matchRuntime.suspend('view')
+    setView(next)
+  }
+  const navigateTabs = (event: KeyboardEvent<HTMLButtonElement>) => {
+    let next: 'arena' | 'lab'
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') next = view === 'arena' ? 'lab' : 'arena'
+    else if (event.key === 'Home') next = 'arena'
+    else if (event.key === 'End') next = 'lab'
+    else return
+    event.preventDefault()
+    selectView(next)
+    document.getElementById(`${next}-tab`)?.focus()
+  }
   return (
     <div className="app-shell">
-      <a className="skip-link" href="#laboratorio">Ir para o laboratório</a>
+      <a className="skip-link" href="#laboratorio">Ir para a área principal</a>
       <aside className="icon-rail" aria-label="Navegação do projeto">
         <Brand compact />
         <nav className="rail-navigation" aria-label="Fases de desenvolvimento">
           <a className="rail-item" href="#camera-title" title="Captura de movimento"><ScanLine size={21} /><span className="sr-only">Captura de movimento</span></a>
-          <a className="rail-item" href="#robot-title" title="Robô e espelhamento 3D"><Bot size={21} /><span className="sr-only">Robô e espelhamento 3D</span></a>
+          <button className={`rail-item ${view === 'lab' ? 'is-current' : ''}`} type="button" onClick={() => selectView('lab')} aria-current={view === 'lab' ? 'page' : undefined} title="Abrir laboratório 3D"><Bot size={21} /><span className="sr-only">Abrir laboratório 3D</span></button>
           <a className="rail-item" href="#motion-engine-title" title="Calibração e gestos"><Focus size={21} /><span className="sr-only">Calibração e gestos</span></a>
-          <a className="rail-item is-current" href="#hybrid-animation-title" aria-current="page" title="Animações híbridas"><Layers3 size={21} /><span className="sr-only">Animações híbridas</span></a>
-          <button className="rail-item" disabled title="Combate · disponível na fase 5" aria-label="Combate · disponível na fase 5"><Swords size={20} /><LockKeyhole className="rail-lock" size={8} /></button>
+          <button className="rail-item" type="button" onClick={() => selectView('lab')} title="Animações no laboratório"><Layers3 size={21} /><span className="sr-only">Animações no laboratório</span></button>
+          <button className={`rail-item ${view === 'arena' ? 'is-current' : ''}`} type="button" onClick={() => selectView('arena')} aria-current={view === 'arena' ? 'page' : undefined} title="Abrir arena de combate"><Swords size={20} /><span className="sr-only">Abrir arena de combate</span></button>
         </nav>
         <a className="rail-item rail-help" href="#guia" title="Guia de início"><CircleHelp size={20} /><span className="sr-only">Guia de início</span></a>
-        <span className="rail-version">0.4</span>
+        <span className="rail-version">0.5</span>
       </aside>
 
       <div className="workspace">
         <header className="global-header">
           <Brand />
-          <div className="header-product"><span className="header-divider" /><span>MOTION LAB</span><span className="version-tag">v0.4.0</span></div>
+          <div className="header-product"><span className="header-divider" /><span>{view === 'arena' ? 'COMBAT ARENA' : 'MOTION LAB'}</span><span className="version-tag">v0.5.0</span></div>
           <div className="environment-status"><span className="environment-dot" /><span>SESSÃO LOCAL</span><span className="environment-separator" /><Monitor size={13} /><span>NO NAVEGADOR</span></div>
         </header>
 
         <main className="main-content robot-workspace" id="laboratorio">
-          <div className="breadcrumbs" aria-label="Localização"><span>WORKSPACE</span><ChevronRight size={11} /><span>MOTION LAB</span></div>
+          <div className="breadcrumbs" aria-label="Localização"><span>WORKSPACE</span><ChevronRight size={11} /><span>{view === 'arena' ? 'COMBAT ARENA' : 'MOTION LAB'}</span></div>
           <section className="workspace-intro" aria-labelledby="workspace-title">
-            <div><div className="section-eyebrow"><span />SEU CORPO. SEU CONTROLE.</div><h1 id="workspace-title">Laboratório de movimento<span className="title-period">.</span></h1><p>Espelhamento contínuo e golpes com movimento próprio. Uma só unidade.</p></div>
-            <div className="phase-chip"><span className="phase-number">04</span><div><span>FASE ATUAL</span><strong>Animações híbridas</strong></div></div>
+            <div><div className="section-eyebrow"><span />SEU CORPO. SEU CONTROLE.</div><h1 id="workspace-title">{view === 'arena' ? 'Seu lugar no ringue' : 'Laboratório de movimento'}<span className="title-period">.</span></h1><p>{view === 'arena' ? 'O combate começa com você. Sincronize, assuma a guarda e enfrente VULCAN-07.' : 'Explore o espelhamento, a calibração e as animações de cada golpe.'}</p></div>
+            <div className="phase-chip"><span className="phase-number">05</span><div><span>FASE ATUAL</span><strong>Arena & combate</strong></div></div>
           </section>
 
-          <div className="laboratory-grid robot-laboratory">
+          <div className="workspace-view-tabs" role="tablist" aria-label="Área de trabalho">
+            <button id="arena-tab" role="tab" type="button" aria-controls="workspace-view-panel" aria-selected={view === 'arena'} tabIndex={view === 'arena' ? 0 : -1} onClick={() => selectView('arena')} onKeyDown={navigateTabs}><Swords size={16} aria-hidden="true" />Arena<span>COMBATE</span></button>
+            <button id="lab-tab" role="tab" type="button" aria-controls="workspace-view-panel" aria-selected={view === 'lab'} tabIndex={view === 'lab' ? 0 : -1} onClick={() => selectView('lab')} onKeyDown={navigateTabs}><Bot size={16} aria-hidden="true" />Laboratório<span>MOVIMENTO</span></button>
+          </div>
+          <div className={`laboratory-grid robot-laboratory combat-workspace-grid ${view === 'arena' ? 'is-arena' : ''}`} id="workspace-view-panel" role="tabpanel" aria-labelledby={`${view}-tab`}>
+            {view === 'arena' && <CombatPanel />}
             <CameraPanel />
-            <RobotPanel />
-            <HybridAnimationPanel />
+            {view === 'lab' && <RobotPanel />}
+            {view === 'lab' && <HybridAnimationPanel />}
             <CombatMotionPanel />
             <DiagnosticsPanel />
           </div>
@@ -58,7 +83,7 @@ function Laboratory() {
             <div className="guide-lighting"><span className="lighting-symbol" aria-hidden="true">✳</span>Uma boa iluminação e um fundo livre ajudam o rastreamento.<a href="#laboratorio">Tudo pronto <ArrowUpRight size={13} /></a></div>
           </section>
 
-          <footer className="workspace-footer"><p><ShieldCheck size={14} /> Seu movimento fica com você.<span>Processamento local, sem gravação ou envio de vídeo.</span></p><div className="phase-roadmap" aria-label="Progresso das fases"><span className="is-complete"><Check size={10} />03 <span>Gestos</span></span><ChevronRight size={11} /><span className="is-active"><span className="roadmap-dot" />04 <span>Animações</span></span><ChevronRight size={11} /><span><LockKeyhole size={10} />05 <span>Combate</span></span></div></footer>
+          <footer className="workspace-footer"><p><ShieldCheck size={14} /> Seu movimento fica com você.<span>Processamento local, sem gravação ou envio de vídeo.</span></p><div className="phase-roadmap" aria-label="Progresso das fases"><span className="is-complete"><Check size={10} />04 <span>Animações</span></span><ChevronRight size={11} /><span className="is-active"><span className="roadmap-dot" />05 <span>Combate</span></span><ChevronRight size={11} /><span><LockKeyhole size={10} />06 <span>Polimento</span></span></div></footer>
         </main>
       </div>
     </div>

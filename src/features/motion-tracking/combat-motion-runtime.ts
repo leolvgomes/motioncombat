@@ -21,6 +21,7 @@ class CombatMotionRuntime {
   private events: GestureEvent[] = []
 
   get calibrated(): boolean { return this.calibrator.snapshot.stage === 'complete' }
+  get motionValid(): boolean { return this.features?.valid === true }
   get currentPosture(): CombatMotionSnapshot['posture'] { return this.posture }
 
   startCalibration(): void {
