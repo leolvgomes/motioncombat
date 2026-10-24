@@ -4,6 +4,9 @@ import { useLabStore } from '../../stores/lab-store'
 import { useRobotStore } from '../../stores/robot-store'
 import { useCombatMotionStore } from '../../stores/combat-motion-store'
 import { combatMotionRuntime } from './combat-motion-runtime'
+import { readAnimationGesture, readAnimationGeneration } from '../robot/animation-signals'
+import { HybridAnimationController } from '../../engine/animation/hybrid-controller'
+import { RigController, RIG_JOINTS } from '../../engine/motion/rig-controller'
 
 /** Synthetic inputs exercise the full real engine pipeline, never the application camera. */
 function pose(timestamp: number, posture: 'neutral' | 'guard' | 'punch', progress = 0): ProcessedPose {
@@ -69,22 +72,68 @@ describe('live calibration and gesture integration', () => {
 
   it('passes a forward trajectory from landmarks through calibration, velocity and recognition once', () => {
     calibrate()
-    for (let index = 0; index < 6; index++) combatMotionRuntime.process(pose(2850 + index * 42, 'guard'))
-    for (const [index, progress] of [0, 0.2, 0.45, 0.7, 0.9, 1].entries()) combatMotionRuntime.process(pose(3150 + index * 42, 'punch', progress))
-    for (let index = 0; index < 15; index++) combatMotionRuntime.process(pose(3450 + index * 42, 'punch', 1))
+    const rig = new RigController()
+    const animation = new HybridAnimationController(2800)
+    let previousTimestamp = 2800
+    let reachedHitWindow = false
+    let attackingSide: 'left' | 'right' | null = null
+    const capture = (sample: ProcessedPose) => {
+      const dt = (sample.timestamp - previousTimestamp) / 1000
+      previousTimestamp = sample.timestamp
+      combatMotionRuntime.process(sample)
+      rig.step({ mode: 'tracking', active: true, paused: false, pose: sample,
+        mirrored: true, aspectRatio: 16 / 9, now: sample.timestamp }, dt)
+      animation.update(rig.rotations, {
+        enabled: true, mode: 'tracking', active: true, calibrated: combatMotionRuntime.calibrated,
+        trackingStatus: rig.sourceStatus, mirrored: true, posture: combatMotionRuntime.currentPosture,
+        gesture: readAnimationGesture(), generation: readAnimationGeneration(), now: sample.timestamp,
+        paused: false, durationScale: 1, intensity: 1, demoAttacks: false,
+      }, dt)
+      reachedHitWindow ||= animation.snapshot.hitActive
+      attackingSide = animation.snapshot.attackSide ?? attackingSide
+    }
+    for (let index = 0; index < 6; index++) capture(pose(2850 + index * 42, 'guard'))
+    for (const [index, progress] of [0, 0.2, 0.45, 0.7, 0.9, 1].entries()) capture(pose(3150 + index * 42, 'punch', progress))
+    for (let index = 0; index < 15; index++) capture(pose(3450 + index * 42, 'punch', 1))
     combatMotionRuntime.publish()
     expect(snapshot().events.filter((event) => event.type === 'PUNCH_LEFT')).toHaveLength(1)
+    expect(readAnimationGesture()?.event.type).toBe('PUNCH_LEFT')
     expect(snapshot().features?.leftArm?.depthAvailable).toBe(true)
     expect(snapshot().features?.leftArm?.extension).toBeCloseTo(1)
+    expect(attackingSide).toBe('right') // Same mirroring as retargeting.
+    expect(reachedHitWindow).toBe(true)
+    expect(animation.snapshot.acceptedAttacks).toBe(1)
+    expect(animation.snapshot.attackSide).toBeNull()
+    expect(animation.snapshot.hitActive).toBe(false)
+    for (const name of RIG_JOINTS) expect(animation.rotations[name].angleTo(rig.rotations[name])).toBeLessThan(1e-7)
+  })
+
+  it.each(['missing', 'invalid'] as const)('invalidates pending attack pulses across a brief %s pose without requiring a display frame', (loss) => {
+    calibrate()
+    for (let index = 0; index < 6; index++) combatMotionRuntime.process(pose(2850 + index * 42, 'guard'))
+    for (const [index, progress] of [0, 0.2, 0.45, 0.7, 0.9, 1].entries()) combatMotionRuntime.process(pose(3150 + index * 42, 'punch', progress))
+    expect(readAnimationGesture()?.event.type).toBe('PUNCH_LEFT')
+    const generation = readAnimationGeneration()
+    const original = pose(3400, 'guard')
+    const unavailable = { ...original, landmarks: original.landmarks.map((point) => ({ ...point, visibility: 0 })) }
+    combatMotionRuntime.process(loss === 'missing' ? null : unavailable)
+    expect(readAnimationGesture()).toBeNull()
+    expect(readAnimationGeneration()).toBeGreaterThan(generation)
+    combatMotionRuntime.process(pose(3440, 'guard'))
+    expect(readAnimationGesture()).toBeNull()
+    expect(combatMotionRuntime.calibrated).toBe(true)
   })
 
   it('invalidates calibration and gesture history when demo replaces a live source', () => {
     calibrate()
+    const previousGeneration = readAnimationGeneration()
     useRobotStore.setState({ mode: 'demo' })
     combatMotionRuntime.process(pose(3000, 'punch', 1))
     expect(snapshot().calibration.profile).toBeNull()
     expect(snapshot().events).toEqual([])
     expect(snapshot().features).toBeNull()
+    expect(readAnimationGesture()).toBeNull()
+    expect(readAnimationGeneration()).toBeGreaterThan(previousGeneration)
     combatMotionRuntime.startCalibration()
     expect(snapshot().calibration.stage).toBe('idle')
   })

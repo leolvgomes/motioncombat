@@ -8,6 +8,7 @@ import { emptyCombatMotionSnapshot, useCombatMotionStore } from '../../stores/co
 import type { CombatMotionSnapshot } from '../../stores/combat-motion-store'
 import { useLabStore } from '../../stores/lab-store'
 import { useRobotStore } from '../../stores/robot-store'
+import { publishAnimationGesture, readAnimationGesture, resetAnimationSignals } from '../robot/animation-signals'
 
 /** Consumes real capture samples; UI snapshots are published by the 250 ms diagnostic schedule. */
 class CombatMotionRuntime {
@@ -18,6 +19,9 @@ class CombatMotionRuntime {
   private posture: CombatMotionSnapshot['posture'] = 'neutral'
   private lastEvent: GestureEvent | null = null
   private events: GestureEvent[] = []
+
+  get calibrated(): boolean { return this.calibrator.snapshot.stage === 'complete' }
+  get currentPosture(): CombatMotionSnapshot['posture'] { return this.posture }
 
   startCalibration(): void {
     if (!this.isLive()) return
@@ -31,6 +35,7 @@ class CombatMotionRuntime {
   }
 
   reset(): void {
+    resetAnimationSignals()
     this.calibrator.reset()
     this.extractor.reset()
     this.gestures.reset()
@@ -46,6 +51,7 @@ class CombatMotionRuntime {
     const calibration = this.calibrator.update(pose)
     const calibrating = calibration.stage === 'neutral' || calibration.stage === 'guard'
     if (!pose || !calibration.profile || calibrating) {
+      if (readAnimationGesture()) resetAnimationSignals()
       this.features = null
       this.posture = 'neutral'
       this.extractor.reset()
@@ -53,9 +59,13 @@ class CombatMotionRuntime {
       return
     }
     this.features = this.extractor.update(pose, calibration.profile)
+    // Invalidate an unconsumed pulse even if a brief global loss happens between
+    // display frames. Reacquisition must not replay the pre-loss attack.
+    if (!this.features.valid && readAnimationGesture()) resetAnimationSignals()
     const recognized = this.gestures.update(this.features, { enabled: true, calibrating: false, profile: calibration.profile })
     this.posture = recognized.posture
     if (recognized.event) {
+      publishAnimationGesture(recognized.event)
       this.lastEvent = recognized.event
       this.events = [recognized.event, ...this.events].slice(0, 6)
       // Recognition is an infrequent semantic event, not a frame-by-frame React update.

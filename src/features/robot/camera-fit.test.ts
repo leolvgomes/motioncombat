@@ -1,6 +1,8 @@
 import { PerspectiveCamera, Quaternion, Vector3 } from 'three'
 import { describe, expect, it } from 'vitest'
 import { sampleDemoPose } from '../../engine/motion/retarget'
+import { getPunchDuration, samplePunchClip } from '../../engine/animation/combat-clips'
+import type { RigPose } from '../../types/robot'
 import { getRobotCameraPosition, ROBOT_CAMERA_FOV, ROBOT_CAMERA_TARGET } from './camera-fit'
 
 const ASPECTS = [0.55, 0.68, 0.8, 1, 16 / 9]
@@ -27,8 +29,7 @@ function envelopeCorners(): Vector3[] {
 /** Actual model hierarchy and bone lengths, sampled without a renderer or camera stream. */
 function demonstrationPoints(): Vector3[] {
   const points: Vector3[] = []
-  for (let time = 0; time <= 16; time += 0.125) {
-    const pose = sampleDemoPose(time)
+  const appendPose = (pose: RigPose) => {
     const torso = new Quaternion().fromArray(pose.torso)
     for (const [side, sign] of [['left', 1], ['right', -1]] as const) {
       const upper = torso.clone().multiply(new Quaternion().fromArray(pose[`${side}Shoulder`]))
@@ -43,6 +44,16 @@ function demonstrationPoints(): Vector3[] {
         for (const y of [-0.16, 0.16]) {
           for (const z of [-0.16, 0.16]) points.push(hand.clone().add(new Vector3(x, y, z)))
         }
+      }
+    }
+  }
+  for (let time = 0; time <= 16; time += 0.125) appendPose(sampleDemoPose(time))
+  for (const side of ['left', 'right'] as const) {
+    for (const intensity of [0.6, 1.3]) {
+      for (const durationScale of [0.75, 1.35]) {
+        const options = { intensity, durationScale }
+        const duration = getPunchDuration(options)
+        for (let step = 0; step <= 32; step++) appendPose(samplePunchClip(side, duration * step / 32, options).pose)
       }
     }
   }
@@ -77,7 +88,7 @@ describe.each(VIEWS)('camera fitting: %s view', (view) => {
     expect(extents.maxZ).toBeLessThan(1)
   })
 
-  it.each(ASPECTS)('keeps the full actual demonstration and fist bounds visible at aspect %s', (aspect) => {
+  it.each(ASPECTS)('keeps rig demonstration, punch clips and fist bounds visible at aspect %s', (aspect) => {
     const extents = projectedExtents(demonstrationPoints(), cameraFor(view, aspect))
     expect(extents.maxX).toBeLessThanOrEqual(0.9)
     expect(extents.maxY).toBeLessThanOrEqual(0.9)

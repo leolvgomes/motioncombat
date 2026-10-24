@@ -75,6 +75,16 @@
   background: var(--orange);
 }
 
+.robot-status.is-animating {
+  color: #f0b99a;
+  border-color: #79503a;
+  background: #47302344;
+}
+
+.robot-status.is-animating .status-dot {
+  background: var(--orange);
+}
+
 .robot-source-control {
   display: flex;
   gap: 5px;
@@ -244,6 +254,10 @@
 }
 
 .robot-stage-hint.is-demo svg {
+  color: #f3a27b;
+}
+
+.robot-stage-hint.is-animating svg {
   color: #f3a27b;
 }
 

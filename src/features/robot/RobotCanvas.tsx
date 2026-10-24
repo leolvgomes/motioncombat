@@ -8,11 +8,18 @@ import { readPose, readPoseAspectRatio } from '../motion-tracking/pose-stream'
 import { RobotModel } from './RobotModel'
 import type { RobotRig } from './RobotModel'
 import { getRobotCameraPosition, ROBOT_CAMERA_FOV, ROBOT_CAMERA_TARGET } from './camera-fit'
+import { HybridAnimationController } from '../../engine/animation/hybrid-controller'
+import { useAnimationStore } from '../../stores/animation-store'
+import { combatMotionRuntime } from '../motion-tracking/combat-motion-runtime'
+import { readAnimationGesture, readAnimationGeneration } from './animation-signals'
 
 function RigDriver() {
   const rig = useRef<RobotRig | null>(null)
   const controller = useRef<RigController | null>(null)
   if (!controller.current) controller.current = new RigController()
+  const hybrid = useRef<HybridAnimationController | null>(null)
+  if (!hybrid.current) hybrid.current = new HybridAnimationController(performance.now())
+  const animationTimer = useRef(0)
   const timer = useRef({ measured: 0, frames: 0, legsTime: 0 })
   const reducedMotion = useRef(false)
 
@@ -27,16 +34,40 @@ function RigDriver() {
   useFrame((_state, delta) => {
     const model = rig.current
     const motion = controller.current
-    if (!model || !motion) return
+    const animation = hybrid.current
+    if (!model || !motion || !animation) return
     const settings = useRobotStore.getState()
     const lab = useLabStore.getState()
     const dt = Math.min(delta, 0.1)
+    const animationSettings = useAnimationStore.getState()
     motion.step({
       mode: settings.mode, paused: settings.paused,
+      demoPunches: animationSettings.demoRoutine === 'punches',
       active: lab.session.status === 'running', pose: readPose(),
       mirrored: lab.mirrored, aspectRatio: readPoseAspectRatio(), now: performance.now(),
     }, settings.mode === 'demo' && reducedMotion.current ? dt * 0.5 : dt)
-    for (const name of RIG_JOINTS) model[name].quaternion.copy(motion.rotations[name])
+    animation.update(motion.rotations, {
+      enabled: animationSettings.hybridEnabled,
+      mode: settings.mode,
+      active: lab.session.status === 'running',
+      calibrated: combatMotionRuntime.calibrated,
+      trackingStatus: motion.sourceStatus,
+      mirrored: lab.mirrored,
+      posture: combatMotionRuntime.currentPosture,
+      gesture: readAnimationGesture(), generation: readAnimationGeneration(),
+      now: performance.now(), paused: settings.paused,
+      durationScale: animationSettings.durationScale, intensity: animationSettings.intensity,
+      demoAttacks: animationSettings.demoRoutine === 'punches',
+    }, settings.mode === 'demo' && reducedMotion.current ? dt * 0.5 : dt)
+    for (const name of RIG_JOINTS) model[name].quaternion.copy(animation.rotations[name])
+
+    animationTimer.current += delta
+    const previousSnapshot = animationSettings.snapshot
+    const animationSnapshot = animation.snapshot
+    if (animationTimer.current >= 0.125 || previousSnapshot?.state !== animationSnapshot.state || previousSnapshot?.phase !== animationSnapshot.phase || previousSnapshot?.hitActive !== animationSnapshot.hitActive) {
+      animationSettings.publishSnapshot({ ...animationSnapshot })
+      animationTimer.current = 0
+    }
 
     // Legs remain independent of camera tracking, supporting a planted stance.
     const frozen = settings.mode === 'demo' && settings.paused
@@ -56,7 +87,10 @@ function RigDriver() {
     }
   })
 
-  useEffect(() => () => useRobotStore.getState().setSceneDiagnostics(null, 'idle'), [])
+  useEffect(() => () => {
+    useRobotStore.getState().setSceneDiagnostics(null, 'idle')
+    useAnimationStore.getState().publishSnapshot(null)
+  }, [])
   return <RobotModel rigRef={rig} />
 }
 

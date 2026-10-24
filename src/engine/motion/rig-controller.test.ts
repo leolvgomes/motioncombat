@@ -3,6 +3,7 @@ import { Quaternion } from 'three'
 import { RigController, RIG_JOINTS } from './rig-controller'
 import type { RigInput } from './rig-controller'
 import { createRestPose } from './retarget'
+import { createCombatGuardPose } from '../animation/combat-clips'
 import type { Landmark, ProcessedPose } from '../../types/motion'
 
 function capturedPose(): ProcessedPose {
@@ -106,5 +107,13 @@ describe('RigController', () => {
     expect(partialController.rotations.leftShoulder.angleTo(completeController.rotations.leftShoulder)).toBeLessThan(0.000001)
     expect(partialController.rotations.leftElbow.angleTo(completeController.rotations.leftElbow)).toBeLessThan(0.000001)
     expect(partialController.rotations.rightShoulder.angleTo(new Quaternion().fromArray(createRestPose().rightShoulder))).toBeLessThan(0.000001)
+  })
+
+  it('uses a stable guard rather than the waving routine during the explicit punch demonstration', () => {
+    const controller = new RigController()
+    const state = input({ mode: 'demo', active: false, pose: null, demoPunches: true })
+    for (let i = 0; i < 120; i++) controller.step(state, 1 / 60)
+    const guard = createCombatGuardPose()
+    for (const joint of RIG_JOINTS) expect(controller.rotations[joint].angleTo(new Quaternion().fromArray(guard[joint]))).toBeLessThan(0.000001)
   })
 })

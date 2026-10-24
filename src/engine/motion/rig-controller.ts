@@ -2,6 +2,7 @@ import { Quaternion } from 'three'
 import type { ProcessedPose } from '../../types/motion'
 import type { RigPose } from '../../types/robot'
 import { createRestPose, retargetPose, sampleDemoPose } from './retarget'
+import { createCombatGuardPose } from '../animation/combat-clips'
 
 export type RigSourceStatus = 'idle' | 'tracking' | 'partial' | 'lost' | 'demo'
 type RigJoint = keyof RigPose
@@ -13,6 +14,8 @@ export const RIG_JOINTS = [
 export interface RigInput {
   mode: 'tracking' | 'demo'
   paused: boolean
+  /** A stable guard is the baseline for the explicitly scripted attack demonstration. */
+  demoPunches?: boolean
   active: boolean
   pose: ProcessedPose | null
   mirrored: boolean
@@ -26,6 +29,7 @@ export class RigController {
   readonly rotations = Object.fromEntries(RIG_JOINTS.map((name) => [name, new Quaternion()])) as Record<RigJoint, Quaternion>
   sourceStatus: RigSourceStatus = 'idle'
   private readonly rest = createRestPose()
+  private readonly demoGuard = createCombatGuardPose()
   private target: RigPose = this.rest
   private readonly scratch = new Quaternion()
   private previousPose: ProcessedPose | null = null
@@ -37,6 +41,7 @@ export class RigController {
   private trackedLeft = false
   private trackedRight = false
   private trackedTorso = false
+  private previousDemoPunches = false
 
   constructor() {
     for (const name of RIG_JOINTS) this.rotations[name].fromArray(this.rest[name])
@@ -45,9 +50,10 @@ export class RigController {
   step(input: RigInput, elapsed: number): void {
     // A resumed/hidden tab must not teleport the rig or advance a long demo interval.
     const dt = Math.max(0, Math.min(Number.isFinite(elapsed) ? elapsed : 0, 0.1))
-    const switched = input.mode !== this.previousMode
+    const switched = input.mode !== this.previousMode || input.mode === 'demo' && Boolean(input.demoPunches) !== this.previousDemoPunches
     if (switched) {
       this.previousMode = input.mode
+      this.previousDemoPunches = Boolean(input.demoPunches)
       this.previousPose = null
       this.demoTime = 0
       this.demoSampleIn = 0
@@ -59,7 +65,8 @@ export class RigController {
         this.demoTime += dt
         this.demoSampleIn -= dt
       }
-      if (switched || (!input.paused && this.demoSampleIn <= 0)) {
+      if (input.demoPunches) this.target = this.demoGuard
+      else if (switched || (!input.paused && this.demoSampleIn <= 0)) {
         this.target = sampleDemoPose(this.demoTime)
         this.demoSampleIn = 1 / 24
       }
