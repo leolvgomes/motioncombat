@@ -1,5 +1,5 @@
 import { PoseProcessor } from '../../engine/motion/pose-processor'
-import type { ProcessedPose } from '../../types/motion'
+import type { PoseFrame, ProcessedPose } from '../../types/motion'
 import { cameraErrorMessage, openCamera, stopStream } from '../camera/camera'
 import type { CameraResolution } from '../camera/camera'
 import { createPoseBackend } from './pose-backend'
@@ -15,6 +15,12 @@ export interface SessionMetrics {
   renderFps: number
   inferenceFps: number
   inferenceMs: number
+  /** From grabbing a camera frame to having its pose. Excludes the camera's own delay. */
+  latencyMs: number
+  /** Longest gap between two display frames in the sample: a direct measure of stutter. */
+  worstFrameMs: number
+  /** Inference runs outside the page's thread. */
+  threaded: boolean
   resolution: string
   cameraLabel: string
   elapsedSeconds: number
@@ -25,6 +31,8 @@ export interface SessionCallbacks {
   /** Mutable rendering refs consume this callback; do not store every pose in React. */
   onPose(pose: ProcessedPose | null): void
   onMetrics(metrics: SessionMetrics): void
+  /** Unfiltered detection, before validation and smoothing. */
+  onFrame?(frame: PoseFrame): void
 }
 
 type TimerHandle = ReturnType<typeof globalThis.setTimeout>
@@ -58,11 +66,14 @@ interface SessionRun {
 }
 
 const INFERENCE_INTERVAL_MS = 1000 / 24
+// A worker can follow a 30 FPS camera; slightly under 33 ms so timer rounding never skips a frame.
+const THREADED_INTERVAL_MS = 30
+const FRAME_POLL_MS = 8
 const METRICS_INTERVAL_MS = 250
 const VIDEO_TIMEOUT_MS = 12_000
 
 export const EMPTY_SESSION_METRICS: SessionMetrics = {
-  renderFps: 0, inferenceFps: 0, inferenceMs: 0, resolution: '—', cameraLabel: '—', elapsedSeconds: 0,
+  renderFps: 0, inferenceFps: 0, inferenceMs: 0, latencyMs: 0, worstFrameMs: 0, threaded: false, resolution: '—', cameraLabel: '—', elapsedSeconds: 0,
 }
 
 /** Owns all browser resources. Inference and display have separate, bounded schedules. */
@@ -78,7 +89,7 @@ export class TrackingSession {
   ) {
     this.dependencies = {
       openCamera,
-      createBackend: createPoseBackend,
+      createBackend: () => createPoseBackend(),
       now: () => performance.now(),
       requestFrame: (callback) => requestAnimationFrame(callback),
       cancelFrame: (handle) => cancelAnimationFrame(handle),
@@ -219,6 +230,11 @@ export class TrackingSession {
     let renderFrames = 0
     let inferenceFrames = 0
     let inferenceDuration = 0
+    let latency = 0
+    let worstFrame = 0
+    let lastRenderAt = started
+    const threaded = run.backend?.threaded === true
+    const interval = threaded ? THREADED_INTERVAL_MS : INFERENCE_INTERVAL_MS
     let lastVideoTime = -1
     let lastPoseAt = started
     let hasPose = false
@@ -227,6 +243,8 @@ export class TrackingSession {
       if (!this.isCurrent(run)) return
       renderFrames += 1
       const now = this.dependencies.now()
+      worstFrame = Math.max(worstFrame, now - lastRenderAt)
+      lastRenderAt = now
       if (hasPose && now - lastPoseAt > 400) {
         hasPose = false
         this.processor.reset()
@@ -238,6 +256,9 @@ export class TrackingSession {
           renderFps: renderFrames * 1000 / elapsed,
           inferenceFps: inferenceFrames * 1000 / elapsed,
           inferenceMs: inferenceFrames > 0 ? inferenceDuration / inferenceFrames : 0,
+          latencyMs: inferenceFrames > 0 ? latency / inferenceFrames : 0,
+          worstFrameMs: worstFrame,
+          threaded,
           resolution: `${this.video.videoWidth} × ${this.video.videoHeight}`,
           cameraLabel: run.stream?.getVideoTracks()[0]?.label || 'Webcam',
           elapsedSeconds: Math.floor((now - started) / 1000),
@@ -246,34 +267,46 @@ export class TrackingSession {
         renderFrames = 0
         inferenceFrames = 0
         inferenceDuration = 0
+        latency = 0
+        worstFrame = 0
       }
       if (this.isCurrent(run)) run.frame = this.dependencies.requestFrame(render)
     }
 
-    const infer = () => {
+    const infer = async () => {
       if (!this.isCurrent(run)) return
       const before = this.dependencies.now()
+      let analyzed = false
       try {
-        // currentTime prevents repeating synchronous inference on the same decoded video frame.
+        // currentTime prevents repeating inference on the same decoded video frame.
         if (this.video.readyState >= 2 && !this.video.paused && this.video.currentTime !== lastVideoTime && run.backend) {
           lastVideoTime = this.video.currentTime
-          const pose = this.processor.process(run.backend.detect(this.video, before))
-          inferenceDuration += this.dependencies.now() - before
+          analyzed = true
+          const detected = run.backend.detect(this.video, before)
+          const frame = detected instanceof Promise ? await detected : detected
+          // The session may have ended while the worker was analyzing this frame.
+          if (!this.isCurrent(run)) return
+          const arrived = this.dependencies.now()
+          inferenceDuration += frame.inferenceMs ?? arrived - before
+          latency += arrived - before
           inferenceFrames += 1
-          lastPoseAt = this.dependencies.now()
+          lastPoseAt = arrived
           hasPose = true
-          this.callbacks.onPose(pose)
+          this.callbacks.onFrame?.(frame)
+          this.callbacks.onPose(this.processor.process(frame))
         }
       } catch {
         this.fail(run, 'O rastreamento foi interrompido. Reinicie a câmera; se persistir, recarregue a página ou use outro navegador.')
         return
       }
       if (this.isCurrent(run)) {
-        run.timer = this.dependencies.setTimer(infer, Math.max(0, Math.ceil(INFERENCE_INTERVAL_MS - (this.dependencies.now() - before))))
+        const rest = Math.max(0, Math.ceil(interval - (this.dependencies.now() - before)))
+        // Without a new image a worker session polls briefly, so a fresh frame waits only a few milliseconds.
+        run.timer = this.dependencies.setTimer(() => { void infer() }, threaded && !analyzed ? FRAME_POLL_MS : rest)
       }
     }
 
     run.frame = this.dependencies.requestFrame(render)
-    run.timer = this.dependencies.setTimer(infer, 0)
+    run.timer = this.dependencies.setTimer(() => { void infer() }, 0)
   }
 }

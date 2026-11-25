@@ -5,14 +5,7 @@ import { useCombatMotionStore } from '../../stores/combat-motion-store'
 import { useLabStore } from '../../stores/lab-store'
 import { useRobotStore } from '../../stores/robot-store'
 import { combatMotionRuntime } from './combat-motion-runtime'
-import type { GestureEvent } from '../../engine/gestures/gesture-engine'
-
-export const gestureLabels: Record<GestureEvent['type'], string> = {
-  PUNCH_LEFT: 'Soco esquerdo', PUNCH_RIGHT: 'Soco direito',
-  HOOK_LEFT: 'Gancho esquerdo', HOOK_RIGHT: 'Gancho direito',
-  UPPERCUT_LEFT: 'Uppercut esquerdo', UPPERCUT_RIGHT: 'Uppercut direito', GUARD: 'Guarda',
-  DODGE_LEFT: 'Esquiva à esquerda', DODGE_RIGHT: 'Esquiva à direita',
-}
+import { gestureLabels } from './gesture-labels'
 
 export function CombatMotionPanel() {
   const { calibration, features, posture, lastEvent, events } = useCombatMotionStore((state) => state.snapshot)

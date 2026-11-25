@@ -3,7 +3,7 @@ import type { Landmark, ProcessedPose } from '../../types/motion'
 
 const REQUIRED_CONFIDENCE = 0.6
 const WORLD_CONFIDENCE = 0.7
-const MAX_SAMPLE_GAP_MS = 200
+const MAX_SAMPLE_GAP_MS = 250
 const MIN_SAMPLE_INTERVAL_MS = 12
 const VELOCITY_SMOOTHING_MS = 70
 const MAX_SPEED = 12

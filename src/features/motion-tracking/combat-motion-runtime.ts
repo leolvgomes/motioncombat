@@ -20,10 +20,16 @@ class CombatMotionRuntime {
   private posture: CombatMotionSnapshot['posture'] = 'neutral'
   private lastEvent: GestureEvent | null = null
   private events: GestureEvent[] = []
+  private readonly listeners = new Set<(event: GestureEvent) => void>()
 
   get calibrated(): boolean { return this.calibrator.snapshot.stage === 'complete' }
   get motionValid(): boolean { return this.features?.valid === true }
   get currentPosture(): CombatMotionSnapshot['posture'] { return this.posture }
+
+  subscribe(listener: (event: GestureEvent) => void): () => void {
+    this.listeners.add(listener)
+    return () => { this.listeners.delete(listener) }
+  }
 
   startCalibration(): void {
     if (!this.isLive()) return
@@ -71,6 +77,7 @@ class CombatMotionRuntime {
       publishAnimationGesture(recognized.event)
       this.lastEvent = recognized.event
       this.events = [recognized.event, ...this.events].slice(0, 6)
+      for (const listener of this.listeners) listener(recognized.event)
       // Recognition is an infrequent semantic event, not a frame-by-frame React update.
       this.publish()
     }

@@ -7,6 +7,7 @@ import { CameraPanel } from '../features/camera/CameraPanel'
 import { DiagnosticsPanel } from '../features/motion-tracking/DiagnosticsPanel'
 import { RobotPanel } from '../features/robot/RobotPanel'
 import { CareerPanel } from '../features/career/CareerPanel'
+import { TrialPanel } from '../features/trials/TrialPanel'
 import { GaragePanel } from '../features/customization/GaragePanel'
 import { combatAudio } from '../features/audio/combat-audio'
 import type { Replay } from '../engine/replay/replay'
@@ -71,13 +72,13 @@ function Laboratory() {
           <button className={`rail-item ${view === 'career' ? 'is-current' : ''}`} type="button" onClick={() => selectView('career')} aria-current={view === 'career' ? 'page' : undefined} title="Abrir carreira e replays"><Trophy size={20} /><span className="sr-only">Abrir carreira e replays</span></button>
         </nav>
         <a className="rail-item rail-help" href="#guia" title="Guia de início"><CircleHelp size={20} /><span className="sr-only">Guia de início</span></a>
-        <span className="rail-version">0.7</span>
+        <span className="rail-version">0.8</span>
       </aside>
 
       <div className="workspace">
         <header className="global-header">
           <Brand />
-          <div className="header-product"><span className="header-divider" /><span>{current.section}</span><span className="version-tag">v0.7.0</span></div>
+          <div className="header-product"><span className="header-divider" /><span>{current.section}</span><span className="version-tag">v0.8.0</span></div>
           <div className="environment-status"><span className="environment-dot" /><span>SESSÃO LOCAL</span><span className="environment-separator" /><Monitor size={13} /><span>NO NAVEGADOR</span></div>
         </header>
 
@@ -85,7 +86,7 @@ function Laboratory() {
           <div className="breadcrumbs" aria-label="Localização"><span>WORKSPACE</span><ChevronRight size={11} /><span>{current.section}</span></div>
           <section className="workspace-intro" aria-labelledby="workspace-title">
             <div><div className="section-eyebrow"><span />SEU CORPO. SEU CONTROLE.</div><h1 id="workspace-title">{current.title}<span className="title-period">.</span></h1><p>{current.description}</p></div>
-            <div className="phase-chip"><span className="phase-number">07</span><div><span>FASE ATUAL</span><strong>Expansões</strong></div></div>
+            <div className="phase-chip"><span className="phase-number">08</span><div><span>FASE ATUAL</span><strong>Precisão</strong></div></div>
           </section>
 
           <div className="workspace-view-tabs" role="tablist" aria-label="Área de trabalho">
@@ -100,6 +101,7 @@ function Laboratory() {
             {view === 'lab' && <RobotPanel />}
             {view === 'lab' && <HybridAnimationPanel />}
             {!single && <CombatMotionPanel />}
+            {view === 'lab' && <TrialPanel />}
             {!single && <DiagnosticsPanel />}
           </div>
 
@@ -109,7 +111,7 @@ function Laboratory() {
             <div className="guide-lighting"><span className="lighting-symbol" aria-hidden="true">✳</span>Uma boa iluminação e um fundo livre ajudam o rastreamento.<a href="#laboratorio">Tudo pronto <ArrowUpRight size={13} /></a></div>
           </section>
 
-          <footer className="workspace-footer"><p><ShieldCheck size={14} /> Seu movimento fica com você.<span>Processamento local, sem gravação ou envio de vídeo.</span></p><div className="phase-roadmap" aria-label="Progresso das fases"><span className="is-complete"><Check size={10} />05 <span>Combate</span></span><ChevronRight size={11} /><span className="is-complete"><Check size={10} />06 <span>Polimento</span></span><ChevronRight size={11} /><span className="is-active"><span className="roadmap-dot" />07 <span>Expansões</span></span></div></footer>
+          <footer className="workspace-footer"><p><ShieldCheck size={14} /> Seu movimento fica com você.<span>Processamento local, sem gravação ou envio de vídeo.</span></p><div className="phase-roadmap" aria-label="Progresso das fases"><span className="is-complete"><Check size={10} />06 <span>Polimento</span></span><ChevronRight size={11} /><span className="is-complete"><Check size={10} />07 <span>Expansões</span></span><ChevronRight size={11} /><span className="is-active"><span className="roadmap-dot" />08 <span>Precisão</span></span></div></footer>
         </main>
       </div>
     </div>

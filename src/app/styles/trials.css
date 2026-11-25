@@ -1,0 +1,158 @@
+/* Phase 08: guided trials and performance measurement. */
+
+.trial-setup,
+.trial-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.trial-actions {
+  justify-content: flex-start;
+  margin-top: 14px;
+}
+
+.trial-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 32px;
+  background: #0a1118f2;
+  text-align: center;
+}
+
+.trial-overlay.is-go {
+  background: #0d2420f5;
+}
+
+/* Read from two metres away. */
+.trial-overlay > h2 {
+  max-width: 18ch;
+  margin: 0;
+  color: #eef5f8;
+  font-size: clamp(32px, 5.4vw, 76px);
+  font-weight: 600;
+  letter-spacing: -1px;
+  line-height: 1.12;
+}
+
+.trial-step {
+  color: #9bb2c0;
+  font-size: clamp(14px, 1.5vw, 20px);
+}
+
+.trial-cue {
+  color: #f3c08f;
+  font-size: clamp(26px, 4vw, 56px);
+  font-weight: 600;
+}
+
+.trial-overlay.is-go > .trial-cue {
+  color: #8ff0cf;
+}
+
+.trial-feedback {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  margin: 0;
+  color: #f0a58c;
+  font-size: clamp(16px, 2vw, 26px);
+}
+
+.trial-feedback.is-good {
+  color: #8ff0cf;
+}
+
+.trial-progress {
+  width: min(620px, 80vw);
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: #24343f;
+}
+
+.trial-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--orange);
+  transform-origin: left;
+}
+
+.trial-report {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid #26363f;
+}
+
+.trial-headline {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: #c8dbe6;
+  font-size: 13px;
+}
+
+.trial-headline > strong {
+  color: #eef5f8;
+  font-size: 40px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.trial-headline small {
+  display: block;
+  margin-top: 4px;
+  color: #8ba4b3;
+  font-size: 12px;
+}
+
+.thread-label {
+  margin-top: 16px;
+}
+
+.performance-panel > .combat-secondary-action {
+  width: 100%;
+  margin-top: 12px;
+}
+
+.performance-panel > .resolution-note > strong {
+  color: #c8dbe6;
+  font-weight: 500;
+}
+
+.performance-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px;
+  margin: 14px 0 0;
+  overflow: hidden;
+  border: 1px solid #293c48;
+  border-radius: 4px;
+  background: #293c48;
+}
+
+.performance-summary > div {
+  padding: 10px 12px;
+  background: #111d26;
+}
+
+.performance-summary dt {
+  color: #8ba4b3;
+  font-size: 11px;
+}
+
+.performance-summary dd {
+  margin: 3px 0 0;
+  color: #dbe8ef;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}

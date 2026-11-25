@@ -4,6 +4,7 @@ import { createCombatGuardPose } from '../../engine/animation/combat-clips'
 import { RIG_JOINTS } from '../../engine/motion/rig-controller'
 import { useProfileStore } from '../../stores/profile-store'
 import { useRobotStore } from '../../stores/robot-store'
+import { FrameLimiter } from '../robot/FrameLimiter'
 import { RobotModel } from '../robot/RobotModel'
 import type { RobotRig } from '../robot/RobotModel'
 
@@ -43,9 +44,10 @@ function GarageCanvas() {
   }, [canvas])
   if (lost) return <div className="garage-message" role="alert"><p>A conexão com a GPU foi interrompida.</p><button className="combat-secondary-action" type="button" onClick={() => setLost(false)}>Reabrir prévia</button></div>
   return <div className="garage-canvas" role="img" aria-label="Prévia 3D do seu robô com a aparência escolhida.">
-    <Canvas camera={{ position: [0, 1.75, 5.2], fov: 34, near: 0.1, far: 40 }} dpr={quality === 'light' ? 1 : [1, 1.5]}
+    <Canvas frameloop="demand" camera={{ position: [0, 1.75, 5.2], fov: 34, near: 0.1, far: 40 }} dpr={quality === 'light' ? 1 : [1, 1.5]}
       onCreated={({ gl, camera }) => { camera.lookAt(0, 1.2, 0); setCanvas(gl.domElement) }}
       fallback={<p className="garage-message">Ative a aceleração gráfica para ver a prévia.</p>}>
+      <FrameLimiter />
       <color attach="background" args={['#0c141b']} />
       <ambientLight intensity={0.7} />
       <hemisphereLight args={['#cfe8f5', '#17212a', 1.3]} />

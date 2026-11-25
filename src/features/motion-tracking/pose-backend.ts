@@ -1,9 +1,19 @@
-import type { Landmark, PoseFrame } from '../../types/motion'
+import type { PoseFrame } from '../../types/motion'
+import { loadLandmarker } from './pose-landmarker'
+import type { InferenceDelegate } from './pose-landmarker'
+import { createWorkerBackend, workerTrackingSupported } from './worker-backend'
 
-export type InferenceDelegate = 'GPU' | 'CPU'
+export type { InferenceDelegate } from './pose-landmarker'
+
+export interface DetectedFrame extends PoseFrame {
+  /** Time spent by the model itself, when measured apart from copying and messaging. */
+  readonly inferenceMs?: number
+}
 
 export interface PoseBackend {
-  detect(video: HTMLVideoElement, timestamp: number): PoseFrame
+  /** True when inference does not block the page. */
+  readonly threaded?: boolean
+  detect(video: HTMLVideoElement, timestamp: number): DetectedFrame | Promise<DetectedFrame>
   close(): void
 }
 
@@ -12,51 +22,25 @@ export interface LoadedPoseBackend {
   delegate: InferenceDelegate
 }
 
-/** Loaded on demand so the idle laboratory does not initialize WebAssembly/WebGL. */
-export async function createPoseBackend(): Promise<LoadedPoseBackend> {
-  const { FilesetResolver, PoseLandmarker } = await import('@mediapipe/tasks-vision')
-  const base = `${import.meta.env.BASE_URL}mediapipe/`
-  let fileset: Awaited<ReturnType<typeof FilesetResolver.forVisionTasks>>
-  try {
-    fileset = await FilesetResolver.forVisionTasks(`${base}wasm`)
-  } catch {
-    throw new Error('Não foi possível carregar o motor de visão. Verifique os arquivos locais do MediaPipe e recarregue a página.')
-  }
+function mediapipeBase(): string {
+  return new URL(`${import.meta.env.BASE_URL}mediapipe/`, document.baseURI).href
+}
 
-  for (const delegate of ['GPU', 'CPU'] as const) {
-    try {
-      const landmarker = await PoseLandmarker.createFromOptions(fileset, {
-        baseOptions: { modelAssetPath: `${base}pose_landmarker_lite.task`, delegate },
-        runningMode: 'VIDEO',
-        numPoses: 1,
-        minPoseDetectionConfidence: 0.5,
-        minPosePresenceConfidence: 0.5,
-        minTrackingConfidence: 0.5,
-        outputSegmentationMasks: false,
-      })
-      const copyLandmarks = (points: readonly Landmark[] | undefined): readonly Landmark[] =>
-        points?.map(({ x, y, z, visibility }) => ({ x, y, z, visibility: visibility ?? 0 })) ?? []
+async function createPageBackend(base: string): Promise<LoadedPoseBackend> {
+  const { delegate, detect, close } = await loadLandmarker(base, false)
+  return { delegate, backend: { threaded: false, detect, close } }
+}
 
-      return {
-        delegate,
-        backend: {
-          detect(video, timestamp) {
-            const result = landmarker.detectForVideo(video, timestamp)
-            return {
-              timestamp,
-              landmarks: copyLandmarks(result.landmarks[0]),
-              worldLandmarks: copyLandmarks(result.worldLandmarks[0]),
-            }
-          },
-          close: () => landmarker.close(),
-        },
-      }
-    } catch {
-      // WebGL may be unavailable or deny initialization; the CPU delegate is a functional fallback.
-      if (delegate === 'CPU') {
-        throw new Error('Não foi possível iniciar o rastreamento em GPU ou CPU. Verifique os arquivos do modelo e use um navegador atualizado com WebAssembly.')
-      }
+/**
+ * Loaded on demand so the idle laboratory does not initialize WebAssembly/WebGL. Any failure
+ * to start the worker falls back to the page, which works everywhere the previous versions did.
+ */
+export async function createPoseBackend(preferWorker = true): Promise<LoadedPoseBackend> {
+  const base = mediapipeBase()
+  if (preferWorker && workerTrackingSupported()) {
+    try { return await createWorkerBackend(base) } catch (error) {
+      console.warn('Rastreamento em segundo plano indisponível; usando a página.', error)
     }
   }
-  throw new Error('O motor de visão não está disponível neste navegador.')
+  return createPageBackend(base)
 }

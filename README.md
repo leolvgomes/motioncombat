@@ -1,6 +1,6 @@
 # STEEL SYNC — Motion Combat
 
-Jogo web de combate robótico controlado pelo corpo. As **fases 1 a 5** implementam webcam, rastreamento corporal, robôs 3D procedurais, calibração, gestos, animações híbridas e uma partida local contra IA, com arena, hitboxes, vida, defesa, rounds e resultado. A **fase 6** acrescenta polimento: faíscas e anéis de impacto, tremor de câmera, som procedural, narração para leitores de tela, atalhos de teclado e sugestão de qualidade por FPS. A **fase 7** acrescenta ganchos, uppercuts e combos, personalização do robô, três cenários, carreira com ranking local e replays de movimento. O laboratório de movimento continua disponível; uma demonstração IA × IA permite observar o combate sem câmera.
+Jogo web de combate robótico controlado pelo corpo. As **fases 1 a 5** implementam webcam, rastreamento corporal, robôs 3D procedurais, calibração, gestos, animações híbridas e uma partida local contra IA, com arena, hitboxes, vida, defesa, rounds e resultado. A **fase 6** acrescenta polimento: faíscas e anéis de impacto, tremor de câmera, som procedural, narração para leitores de tela, atalhos de teclado e sugestão de qualidade por FPS. A **fase 7** acrescenta ganchos, uppercuts e combos, personalização do robô, três cenários, carreira com ranking local e replays de movimento. A **fase 8** trata desempenho e precisão: rastreamento em segundo plano, ritmo da cena conforme a GPU, filtro adaptativo e aferição guiada. O laboratório de movimento continua disponível; uma demonstração IA × IA permite observar o combate sem câmera.
 
 ## Stack
 
@@ -17,7 +17,7 @@ Jogo web de combate robótico controlado pelo corpo. As **fases 1 a 5** implemen
 | Web Audio API | Sons de combate sintetizados no navegador, sem arquivos de áudio |
 | Vitest 5 | Câmera, rig, gestos, animações, geometria de contato, regras, efeitos, áudio e integração |
 
-Não há motor de física, backend, upload, gravação de vídeo, analytics ou persistência de landmarks. O combate usa passos fixos e volumes geométricos simples; não necessita de Rapier. O `localStorage` do navegador guarda preferências, perfil do robô, histórico de partidas e até três replays com as rotações dos robôs. Nada é enviado.
+Não há motor de física, backend, upload, gravação de vídeo, analytics ou persistência automática de landmarks. A aferição guiada mantém posições de articulações na memória e só gera um arquivo se você clicar em baixar. O combate usa passos fixos e volumes geométricos simples; não necessita de Rapier. O `localStorage` do navegador guarda preferências, perfil do robô, histórico de partidas e até três replays com as rotações dos robôs. Nada é enviado.
 
 ## Requisitos
 
@@ -48,6 +48,7 @@ npm test            # Todos os testes uma vez
 npm run test:watch  # Testes em modo contínuo
 npm run build       # Verificação TypeScript e produção em dist/
 npm run preview     # Servir o build localmente
+npm run evaluate:trials -- arquivo.json  # Comparar variantes sobre uma aferição baixada
 ```
 
 Execute `setup:tracking` **antes do build** para incluir o modelo e WASM em `dist/`. O build e a prévia são estáticos, sem backend.
@@ -89,6 +90,9 @@ A arena, o laboratório e a garagem alternam a cena 3D; somente um canvas 3D fic
 13. Para um **gancho**, abra o punho além do ombro e cruze até o centro, na altura do peito ao rosto, com o cotovelo dobrado. Para um **uppercut**, desça o punho abaixo da linha dos ombros e suba com o cotovelo dobrado. A outra mão fica parada na guarda. Se notar golpes indevidos, desative **Ganchos e uppercuts**. Toda nova sessão de câmera exige nova calibração.
 14. Com **Animações de golpe** habilitadas, cada golpe reconhecido pode assumir temporariamente o braço correspondente do robô, com preparação, extensão e recolhimento. O braço oposto segue o corpo. O painel de animação informa o lado **do robô**; o painel de gestos informa o lado **do jogador**. O espelhamento pode trocar esses lados.
 15. Ajuste **Duração do golpe** e **Amplitude** para o próximo soco, ou desative as animações para comparar com o espelhamento direto. Um golpe deve terminar antes do próximo: gestos recebidos durante ataque/retorno são descartados, sem fila. **Diagnóstico da transição** exibe o peso e a janela temporal; ela não calcula acerto ou dano.
+
+16. Em **Aferição guiada**, com câmera e calibração prontas, siga os avisos na tela. Ao final, veja acertos, golpes perdidos, confusões e golpes indevidos. O arquivo pode ser baixado para ajustar os limiares com movimentos reais.
+17. Em **Desempenho**, ao lado do diagnóstico, use **Medir por 15 s** na arena e no laboratório. O painel mostra a GPU usada pelo navegador e avisa quando ela é integrada.
 
 Também revise manualmente: negar a permissão; desconectar a câmera; fechar/ocultar a aba; cancelar durante o carregamento; iniciar novamente; sair do quadro e retornar; ocultar um braço; usar pouca luz; reduzir a largura da janela para 375 px. A câmera para ao ocultar a página e exige novo clique ao voltar, por privacidade e economia de recursos.
 
@@ -138,6 +142,11 @@ Se a permissão foi negada, libere-a nas configurações do site no navegador. S
 - Garagem com prévia 3D: nome, seis blindagens, seis luzes, três cabeças e três ombreiras. As cores são aplicadas aos materiais existentes, sem recriar geometria.
 - Três cenários originais: Fundição, Porto noturno e Cânion, com luzes, cores e objetos próprios e o mesmo ringue.
 - Carreira local: até 200 partidas com webcam, estatísticas, pontuação e ranking das 10 melhores.
+- Rastreamento em Worker ou na página. A escolha automática usa o Worker em GPU dedicada e a página em GPU integrada; se o Worker falhar ao iniciar, a página assume.
+- Modelo aquecido durante o carregamento, para a compilação de shaders não travar os primeiros segundos.
+- Limite de quadros da cena e redução automática quando a pose chega atrasada no modo em segundo plano.
+- Filtro adaptativo: movimentos rápidos e contínuos têm menos atraso; tremor e detecções isoladas fora do lugar mantêm o filtro completo.
+- Aferição guiada, medição de desempenho de 15 s, identificação da GPU e avaliação offline de variantes sobre a mesma gravação.
 - Replays a partir das rotações dos robôs, com linha do tempo, velocidade, sons, efeitos e narração. Os três mais recentes ficam salvos; demonstrações saem primeiro.
 
 ## Arquitetura
@@ -155,6 +164,7 @@ src/
 │   ├── customization/              # Catálogo visual, garagem e prévia 3D
 │   ├── career/                     # Estatísticas, ranking, replays e lista de combos
 │   ├── replay/                     # Controles de reprodução
+│   ├── trials/                     # Aferição guiada e medição de desempenho
 │   ├── audio/                      # Sintetizador Web Audio e mapeamento evento → som
 │   └── combat/                     # Ponte de captura/partida, HUD, controles, narração e sugestão de qualidade
 ├── engine/
@@ -186,12 +196,14 @@ O `CombatEngine` acumula eventos de apresentação em uma fila limitada a 64 ite
 
 `ReplayRecorder` amostra o estado da partida a cada 1/24 s, sem tempo de pausa ou contagem, em inteiros de 16 bits. `ReplayPlayer` interpola esses quadros e expõe os mesmos `fighters` e `snapshot` de uma partida; por isso arena, HUD, som e efeitos não sabem a diferença. `MatchRuntime` alterna entre a simulação e o replay, e nunca grava carreira ou replay durante a reprodução. Dados salvos são validados campo a campo; entradas inválidas são descartadas.
 
+`pose-backend` escolhe onde a inferência roda. `worker-backend` envia um quadro reduzido por vez, com tempo limite, e nunca enfileira. `FrameLimiter` conduz os canvases sob demanda, e `FramePacer` reduz ou devolve quadros conforme o atraso medido. `TrialRunner` conduz o roteiro da aferição; `evaluateRecording` reprocessa a gravação pela cadeia real de filtros e gestos, sem câmera.
+
 ### Frequências e processamento
 
-- A inferência tem agendador próprio com teto de **24 Hz** e ignora o mesmo frame de vídeo decodificado. O intervalo inclui o tempo da inferência; não há fila de frames acumulados.
+- A inferência tem agendador próprio, com teto de **24 Hz** na página e cerca de **30 Hz** no Worker, e ignora o mesmo frame de vídeo decodificado. Só há um frame em análise por vez; não há fila.
 - O overlay é desenhado por `requestAnimationFrame` em Canvas. Landmarks são guardados em refs, sem renderizações React a cada frame.
 - O diagnóstico é publicado aproximadamente a cada **250 ms**, independentemente do vídeo.
-- Suavização exponencial usa constante temporal de **80 ms**, independente da taxa de captura. Confiança/visibilidade atuais não são atrasadas pelo filtro.
+- A suavização usa constante temporal de **80 ms**, que cai até **28 ms** quando dois deslocamentos seguidos concordam em direção e velocidade. Confiança/visibilidade atuais não são atrasadas pelo filtro.
 - Depois de **400 ms** de ausência, filtros antigos são reinicializados. Landmarks sem confiança não desenham conexões. Não há pose antiga mantida como se fosse uma detecção atual.
 - `renderFps` mede a frequência do loop `requestAnimationFrame`, não FPS de uma cena 3D ou taxa da webcam. `inferenceMs` inclui detecção e processamento dos landmarks; não mede latência ponta a ponta.
 - `sceneFps` mede os frames do renderizador 3D e é publicado a cada 500 ms. O controlador calcula novos alvos na frequência de captura; a demonstração é amostrada em até 24 Hz. O loop 3D aplica as rotações com referências e quaternions reutilizados, sem estado React por frame.
@@ -218,6 +230,8 @@ A fase 6 acrescenta testes da coerência dos eventos com as estatísticas de uma
 
 A fase 7 acrescenta testes de combos, clips e contato dos novos golpes, reconhecimento de ganchos e uppercuts com casos de falso positivo, gravação/reprodução/validação de replays, carreira, perfil e catálogo visual. A arena, os cenários, a garagem, a carreira e o replay também foram conferidos no Chrome. Veja o [relatório da fase 7](docs/phase-7-review.md).
 
+A fase 8 acrescenta testes do Worker, do agendamento, do ritmo da cena, do filtro adaptativo, da aferição e da avaliação offline. Veja o [relatório da fase 8](docs/phase-8-review.md).
+
 A resposta de ganchos e uppercuts com webcam permanece **pendente de revisão real**. A demonstração é identificada como programada e não preenche os indicadores da webcam com dados artificiais. O [relatório da fase 3](docs/phase-3-review.md) preserva o histórico da correção frontal.
 
 ## Limitações atuais
@@ -226,7 +240,8 @@ A resposta de ganchos e uppercuts com webcam permanece **pendente de revisão re
 - Hitboxes são aproximações geométricas de cabeça/corpo e punhos, sem física de contato entre peças ou IK para alcançar um alvo. A IA e o balanceamento são iniciais; os limiares de ganchos e uppercuts são iniciais.
 - Efeitos e sons são procedurais e simples: não há pós-processamento, bloom, câmera lenta, trilha musical ou locução gravada. Os sons foram verificados com um duplo do Web Audio, não por audição; timbre e volume precisam de revisão real.
 - A narração acessível cobre eventos da partida, mas o jogo continua exigindo movimento corporal visível pela câmera; não há modo alternativo de controle.
-- A inferência `detectForVideo` é síncrona e ocorre na thread principal. O teto de frequência e o modelo Lite reduzem o custo, mas podem ocorrer pausas durante carregamento ou em CPUs fracas. Não há Worker implementado. O contrato do backend preserva uma fronteira para futura migração, que exigirá um protocolo assíncrono e transferência de frames.
+- A inferência disputa a GPU com a cena 3D. Em GPU integrada, o Worker deixa a página mais lisa, mas atrasa a pose; por isso o modo automático mantém a página. Sem câmera real, as medições desta entrega usaram um vídeo desenhado.
+- As medidas do corpo usam x e y normalizados sem corrigir a proporção do vídeo, o que estica a vertical em 1,78× em 16:9. Os limiares atuais foram ajustados nessa métrica; a correção só deve entrar após comparação com uma aferição real.
 - 60 FPS de exibição e 20–30 inferências/s são objetivos, não resultados garantidos ou comprovados nesta máquina.
 - O filtro reduz tremores, adicionando atraso visual. Inferência usa uma única imagem monocular; profundidade e inclinação são aproximadas.
 - Um punho à frente pode esconder o cotovelo. Sem confiança suficiente, o sistema não reconstrói esse braço à força; ele volta suavemente ao repouso até a detecção se recuperar. A correção do solver remove a restrição artificial, mas não resolve oclusão física nem garante precisão de profundidade.
@@ -237,7 +252,7 @@ A resposta de ganchos e uppercuts com webcam permanece **pendente de revisão re
 - Resolução é uma preferência; dispositivos podem fornecer outra. A CPU de fallback pode reduzir a frequência efetiva.
 - O modelo e as alternativas SIMD/não-SIMD WASM ampliam `dist/` (aproximadamente 47 MB sem compressão); cada navegador carrega apenas o runtime selecionado. O runtime 3D adiciona aproximadamente 0,94 MB de JavaScript minificado, dividido em chunks.
 - O rig aproxima a silhueta e a flexão dos braços; não resolve colisões entre as partes do robô, não estima pegadas ou dedos, nem compensa completamente rotações fora do plano. Mantenha-se de frente para melhores resultados.
-- Não há testes automatizados de ponta a ponta no navegador nem aferição real dos novos gestos nesta entrega. Câmera/CPU e renderização compartilham a thread principal; use 480p e qualidade Leve se houver lentidão.
+- Não há testes automatizados de ponta a ponta no navegador nem aferição real dos novos gestos nesta entrega. No modo na página, câmera/CPU e renderização compartilham a thread principal; use 480p e qualidade Leve se houver lentidão.
 
 ## Roadmap e autorização
 
@@ -247,9 +262,10 @@ A resposta de ganchos e uppercuts com webcam permanece **pendente de revisão re
 4. **Animações híbridas:** implementada; clips, máscaras e transições suaves.
 5. **Arena e combate:** implementada; IA, contato, vida, defesa, rounds e resultados.
 6. **Polimento:** implementada; efeitos de impacto, som procedural, acessibilidade e sugestão de qualidade.
-7. **Expansões:** implementação atual para revisão; combos avançados, personalização, cenários, carreira, ranking local e replays. O multiplayer online fica para uma fase própria, com backend.
+7. **Expansões:** implementada; combos avançados, personalização, cenários, carreira, ranking local e replays. O multiplayer online fica para uma fase própria, com backend.
+8. **Desempenho e precisão:** implementação atual para revisão; a calibração final dos limiares depende da sua aferição.
 
-O desenvolvimento está interrompido ao final da fase 7 para revisão antes do commit. Sugestão de commit: `feat: add advanced combos, robot customization, arenas, career and replays`.
+O desenvolvimento está interrompido na fase 8 para revisão antes do commit e coleta da aferição. Sugestão de commit: `feat: add background tracking, frame pacing and guided gesture trials`.
 
 ## Referências técnicas
 

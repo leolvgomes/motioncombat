@@ -16,7 +16,8 @@ interface NeutralReference {
 
 const NEUTRAL_HOLD_MS = 1500
 const GUARD_HOLD_MS = 1200
-const MAX_SAMPLE_GAP_MS = 150
+// Same tolerance as gestures: a slow device must not silently restart every hold.
+const MAX_SAMPLE_GAP_MS = 250
 const CALIBRATION_LANDMARKS = [0, 11, 12, 13, 14, 15, 16] as const
 const NEUTRAL_MESSAGE = 'Relaxe os ombros e mantenha os punhos visíveis à frente da cintura. Fique de frente e mantenha a posição.'
 const GUARD_MESSAGE = 'Eleve os dois punhos próximos ao rosto, com os cotovelos flexionados. Mantenha a guarda.'

@@ -261,6 +261,68 @@ describe('TrackingSession scheduling', () => {
     fixture.session.stop()
   })
 
+  it('follows a 30 FPS camera from a worker, one frame at a time, with its own timings', async () => {
+    let active = 0
+    let overlap = 0
+    const detect = vi.fn((_video: HTMLVideoElement, timestamp: number) => new Promise<{ timestamp: number; landmarks: []; worldLandmarks: []; inferenceMs: number }>((resolve) => {
+      active += 1
+      overlap = Math.max(overlap, active)
+      setTimeout(() => { active -= 1; resolve({ timestamp, landmarks: [], worldLandmarks: [], inferenceMs: 12 }) }, 20)
+    }))
+    const backend = { threaded: true, detect, close: vi.fn() }
+    const fixture = setup({ createBackend: async () => ({ backend, delegate: 'GPU' as const }) })
+    const onFrame = vi.fn()
+    fixture.callbacks.onFrame = onFrame
+    await fixture.session.start('720p')
+    for (let frame = 1; frame <= 60; frame += 1) {
+      // The camera delivers a new image at every second display frame.
+      fixture.video.currentTime = Math.floor(frame / 2) / 30
+      await vi.advanceTimersByTimeAsync(1000 / 60)
+      fixture.renderFrame()
+    }
+    expect(overlap).toBe(1)
+    expect(detect.mock.calls.length).toBeGreaterThanOrEqual(27)
+    expect(detect.mock.calls.length).toBeLessThanOrEqual(31)
+    expect(onFrame).toHaveBeenCalled()
+    const metrics = vi.mocked(fixture.callbacks.onMetrics).mock.calls.at(-1)![0]
+    expect(metrics).toMatchObject({ threaded: true, inferenceMs: 12 })
+    expect(metrics.latencyMs).toBeGreaterThanOrEqual(20)
+    expect(metrics.worstFrameMs).toBeLessThan(40)
+    fixture.session.stop()
+  })
+
+  it('ignores a pose that arrives after the session ended and reports a worker failure', async () => {
+    const result = deferred<{ timestamp: number; landmarks: []; worldLandmarks: [] }>()
+    const backend = { threaded: true, detect: vi.fn(() => result.promise), close: vi.fn() }
+    const fixture = setup({ createBackend: async () => ({ backend, delegate: 'GPU' as const }) })
+    await fixture.session.start('720p')
+    fixture.video.currentTime = 0.1
+    await vi.advanceTimersByTimeAsync(5)
+    expect(backend.detect).toHaveBeenCalledOnce()
+    fixture.session.stop()
+    result.resolve({ timestamp: 1, landmarks: [], worldLandmarks: [] })
+    await vi.advanceTimersByTimeAsync(100)
+    expect(vi.mocked(fixture.callbacks.onPose).mock.calls.every(([pose]) => pose === null)).toBe(true)
+    expect(vi.getTimerCount()).toBe(0)
+
+    const failing = setup({ createBackend: async () => ({ backend: { threaded: true, detect: () => Promise.reject(new Error('worker')), close: vi.fn() }, delegate: 'GPU' as const }) })
+    await failing.session.start('720p')
+    await vi.advanceTimersByTimeAsync(5)
+    expect(failing.callbacks.onState).toHaveBeenLastCalledWith({ status: 'error', delegate: null, error: expect.stringContaining('rastreamento foi interrompido') })
+    expect(failing.track.stop).toHaveBeenCalledOnce()
+  })
+
+  it('reports the longest display gap of each sample', async () => {
+    const fixture = setup()
+    await fixture.session.start('720p')
+    for (const gap of [16, 16, 140, 16, 16, 60]) {
+      await vi.advanceTimersByTimeAsync(gap)
+      fixture.renderFrame()
+    }
+    expect(vi.mocked(fixture.callbacks.onMetrics).mock.calls.at(-1)![0].worstFrameMs).toBe(140)
+    fixture.session.stop()
+  })
+
   it('cleans up and gives actionable feedback after an inference failure', async () => {
     const fixture = setup()
     fixture.backend.detect.mockImplementation(() => { throw new Error('lost context') })

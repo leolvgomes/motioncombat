@@ -1,7 +1,7 @@
 {
   "name": "steel-sync-motion-combat",
   "private": true,
-  "version": "0.7.0",
+  "version": "0.8.0",
   "type": "module",
   "engines": {
     "node": ">=22.12.0"
@@ -13,7 +13,8 @@
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
-    "setup:tracking": "node scripts/setup-tracking.mjs"
+    "setup:tracking": "node scripts/setup-tracking.mjs",
+    "evaluate:trials": "node scripts/evaluate-trials.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "1.1.1",

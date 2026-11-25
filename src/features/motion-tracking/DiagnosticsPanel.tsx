@@ -1,8 +1,9 @@
-import { Activity, ChevronDown, Cpu, Gauge, ScanLine, Settings2, Waves, Zap } from 'lucide-react'
+import { Activity, ChevronDown, Cpu, Gauge, ScanLine, Settings2, Timer, TriangleAlert, Waves, Zap } from 'lucide-react'
 import { Toggle } from '../../components/ui/Toggle'
 import { LANDMARK_VISIBILITY_THRESHOLD } from '../../engine/motion/pose-processor'
 import { useLabStore } from '../../stores/lab-store'
-import type { Resolution } from '../../stores/lab-store'
+import { PerformanceMeasure } from '../trials/PerformanceSummary'
+import type { Resolution, TrackingThread } from '../../stores/lab-store'
 
 const confidenceSegments = Array.from({ length: 24 }, (_, index) => index)
 const landmarkGroups = [
@@ -20,6 +21,8 @@ export function DiagnosticsPanel() {
   const setResolution = useLabStore((state) => state.setResolution)
   const showGuide = useLabStore((state) => state.showGuide)
   const toggleGuide = useLabStore((state) => state.toggleGuide)
+  const trackingThread = useLabStore((state) => state.trackingThread)
+  const setTrackingThread = useLabStore((state) => state.setTrackingThread)
   const running = session.status === 'running'
   const hasMetrics = running && metrics !== null && metrics.resolution !== '—'
   const livePose = running ? pose : null
@@ -40,13 +43,16 @@ export function DiagnosticsPanel() {
 
       <div className="diagnostic-metrics">
         <div className="metric-row"><span className="metric-icon"><Gauge size={15} /></span><div><span>Renderização</span><small>Objetivo: 60 FPS</small></div><strong>{hasMetrics ? Math.round(metrics.renderFps) : '—'}<small>FPS</small></strong></div>
-        <div className="metric-row"><span className="metric-icon"><Waves size={15} /></span><div><span>Rastreamento</span><small>Alvo do agendador: 24 Hz</small></div><strong>{hasMetrics ? Math.round(metrics.inferenceFps) : '—'}<small>Hz</small></strong></div>
+        <div className="metric-row"><span className="metric-icon"><Waves size={15} /></span><div><span>Rastreamento</span><small>{hasMetrics ? metrics.threaded ? 'Em segundo plano · até 30 Hz' : 'Na página · até 24 Hz' : 'Até 24 Hz na página, 30 em segundo plano'}</small></div><strong>{hasMetrics ? Math.round(metrics.inferenceFps) : '—'}<small>Hz</small></strong></div>
         <div className="metric-row"><span className="metric-icon"><Zap size={15} /></span><div><span>Inferência</span><small>Tempo médio por detecção</small></div><strong>{hasMetrics ? metrics.inferenceMs.toFixed(1) : '—'}<small>ms</small></strong></div>
+        <div className="metric-row"><span className="metric-icon"><Timer size={15} /></span><div><span>Atraso da pose</span><small>Da imagem à pose pronta</small></div><strong>{hasMetrics ? Math.round(metrics.latencyMs) : '—'}<small>ms</small></strong></div>
+        <div className="metric-row"><span className="metric-icon"><TriangleAlert size={15} /></span><div><span>Pior engasgo</span><small>Maior intervalo entre quadros</small></div><strong>{hasMetrics ? Math.round(metrics.worstFrameMs) : '—'}<small>ms</small></strong></div>
       </div>
 
       <div className="landmarks-block"><div className="diagnostic-section-title"><span><ScanLine size={12} />PONTOS VISÍVEIS</span><strong>{livePose?.upperBodyVisibleCount ?? '—'}<small>/ 9</small></strong></div><div className="landmark-groups">{landmarkGroups.map(({ label, indices }) => <div className="landmark-group" key={label}><span>{label}</span><div aria-label={`${label}: ${livePose ? indices.reduce((count, index) => count + Number((livePose.visibility[index] ?? 0) >= LANDMARK_VISIBILITY_THRESHOLD), 0) : 'sem dados'} de 2 visíveis`}>{indices.map((index) => <span key={index} className={`landmark-dot ${livePose && (livePose.visibility[index] ?? 0) >= LANDMARK_VISIBILITY_THRESHOLD ? 'is-visible' : ''}`} />)}</div></div>)}</div><p className="landmarks-note">Cabeça + 8 pontos do tronco e braços.</p></div>
     </section>
 
-    <section className="configuration-panel" aria-labelledby="configuration-title"><h2 id="configuration-title"><Settings2 size={15} />Configuração da sessão</h2><label className="resolution-label" htmlFor="resolution">Resolução da câmera</label><div className="resolution-select"><select id="resolution" value={resolution} onChange={(event) => setResolution(event.target.value as Resolution)} disabled={busy}><option value="720p">1280 × 720 · HD</option><option value="480p">640 × 480 · Leve</option></select><ChevronDown size={14} aria-hidden="true" /></div><p className="resolution-note">{busy ? 'Interrompa a câmera para alterar.' : 'Reduza a resolução se houver lentidão.'}</p><div className="guide-toggle"><Toggle label="Guia de enquadramento" checked={showGuide} onChange={toggleGuide} /></div><div className="model-details"><Cpu size={15} /><div><span>MediaPipe Pose Landmarker</span><small>MODELO LITE · {session.delegate === 'GPU' ? 'GPU' : session.delegate === 'CPU' ? 'CPU' : 'LOCAL'}</small></div><span className="local-chip">ON-DEVICE</span></div></section>
+    <section className="configuration-panel" aria-labelledby="configuration-title"><h2 id="configuration-title"><Settings2 size={15} />Configuração da sessão</h2><label className="resolution-label" htmlFor="resolution">Resolução da câmera</label><div className="resolution-select"><select id="resolution" value={resolution} onChange={(event) => setResolution(event.target.value as Resolution)} disabled={busy}><option value="720p">1280 × 720 · HD</option><option value="480p">640 × 480 · Leve</option></select><ChevronDown size={14} aria-hidden="true" /></div><p className="resolution-note">{busy ? 'Interrompa a câmera para alterar.' : 'Reduza a resolução se houver lentidão.'}</p><div className="guide-toggle"><Toggle label="Guia de enquadramento" checked={showGuide} onChange={toggleGuide} /></div><label className="resolution-label thread-label" htmlFor="tracking-thread">Execução do rastreamento</label><div className="resolution-select"><select id="tracking-thread" value={trackingThread} onChange={(event) => setTrackingThread(event.target.value as TrackingThread)} disabled={busy}><option value="auto">Automática</option><option value="page">Na página · resposta mais rápida</option><option value="worker">Segundo plano · cena mais fluida</option></select><ChevronDown size={14} aria-hidden="true" /></div><p className="resolution-note">{busy ? 'Interrompa a câmera para alterar.' : 'A automática usa o segundo plano quando há GPU dedicada.'}</p><div className="model-details"><Cpu size={15} /><div><span>MediaPipe Pose Landmarker</span><small>MODELO LITE · {session.delegate === 'GPU' ? 'GPU' : session.delegate === 'CPU' ? 'CPU' : 'LOCAL'}</small></div><span className="local-chip">ON-DEVICE</span></div></section>
+    <PerformanceMeasure />
   </aside>
 }

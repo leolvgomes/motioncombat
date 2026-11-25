@@ -6,6 +6,7 @@ import { useLabStore } from '../../stores/lab-store'
 import { useProfileStore } from '../../stores/profile-store'
 import { useRobotStore } from '../../stores/robot-store'
 import { readPose, readPoseAspectRatio } from '../motion-tracking/pose-stream'
+import { FrameLimiter } from './FrameLimiter'
 import { RobotModel } from './RobotModel'
 import type { RobotRig } from './RobotModel'
 import { getRobotCameraPosition, ROBOT_CAMERA_FOV, ROBOT_CAMERA_TARGET } from './camera-fit'
@@ -154,11 +155,12 @@ function RobotCanvas() {
   if (lost) return <CanvasFallback>A conexão com a GPU foi interrompida. <button type="button" onClick={() => { setLost(false); setRevision((value) => value + 1) }}>Reabrir visualização 3D</button></CanvasFallback>
 
   return <div className="robot-canvas-shell" role="img" aria-label="Robô metálico articulado em uma plataforma de teste 3D; acompanha a fonte de movimento selecionada.">
-    <Canvas key={revision} camera={{ position: [0, 1.65, 6.1], fov: ROBOT_CAMERA_FOV, near: 0.1, far: 40 }}
+    <Canvas key={revision} frameloop="demand" camera={{ position: [0, 1.65, 6.1], fov: ROBOT_CAMERA_FOV, near: 0.1, far: 40 }}
       dpr={quality === 'light' ? 1 : [1, 1.5]} shadows={quality === 'balanced'}
       gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
       onCreated={({ gl }) => setCanvas(gl.domElement)}
       fallback={<CanvasFallback>Ative a aceleração gráfica ou tente um navegador com WebGL 2. A webcam continua disponível.</CanvasFallback>}>
+      <FrameLimiter />
       <LabStage light={quality === 'light'} />
       <RigDriver />
       <ViewController />

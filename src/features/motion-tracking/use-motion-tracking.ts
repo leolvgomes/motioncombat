@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useLabStore } from '../../stores/lab-store'
+import { prefersWorker, useLabStore } from '../../stores/lab-store'
 import type { ProcessedPose } from '../../types/motion'
 import { drawPose } from './draw-pose'
+import { createPoseBackend } from './pose-backend'
 import { TrackingSession } from './tracking-session'
 import { publishPose, setPoseAspectRatio } from './pose-stream'
 import { useRobotStore } from '../../stores/robot-store'
+import { framePacer } from '../robot/frame-pacing'
+import { trialRuntime } from '../trials/trial-runtime'
 import { combatMotionRuntime } from './combat-motion-runtime'
 
 export function useMotionTracking() {
@@ -22,8 +25,13 @@ export function useMotionTracking() {
     const session = new TrackingSession(video, {
       onState: (state) => {
         useLabStore.getState().setSession(state)
-        if (state.status !== 'running') combatMotionRuntime.reset()
+        if (state.status !== 'running') {
+          combatMotionRuntime.reset()
+          trialRuntime.onSessionEnded()
+          framePacer.reset()
+        }
       },
+      onFrame: (frame) => trialRuntime.onFrame(frame),
       onPose: (pose) => {
         poseRef.current = pose
         publishPose(pose)
@@ -32,6 +40,8 @@ export function useMotionTracking() {
       onMetrics: (metrics) => {
         const store = useLabStore.getState()
         if (store.session.status !== 'running') return
+        if (metrics.threaded) framePacer.observe(metrics.latencyMs)
+        trialRuntime.onMetrics(metrics)
         const pose = poseRef.current
         store.setDiagnostics(metrics, pose ? {
           confidence: pose.confidence,
@@ -43,8 +53,14 @@ export function useMotionTracking() {
         } : null)
         combatMotionRuntime.publish()
       },
+    }, {
+      createBackend: () => {
+        const { trackingThread, gpu } = useLabStore.getState()
+        return createPoseBackend(prefersWorker(trackingThread, gpu))
+      },
     })
     sessionRef.current = session
+    const unsubscribe = combatMotionRuntime.subscribe((event) => trialRuntime.onGesture(event))
     const updateDimensions = () => {
       if (video.videoWidth > 0 && video.videoHeight > 0) {
         setPoseAspectRatio(video.videoWidth / video.videoHeight)
@@ -55,6 +71,7 @@ export function useMotionTracking() {
     video.addEventListener('resize', updateDimensions)
     return () => {
       session.stop()
+      unsubscribe()
       sessionRef.current = null
       video.removeEventListener('loadedmetadata', updateDimensions)
       video.removeEventListener('resize', updateDimensions)
@@ -77,14 +94,20 @@ export function useMotionTracking() {
     }
 
     let frame = 0
+    let drawn: ProcessedPose | null | undefined
     const render = () => {
       if (video.videoWidth > 0 && video.videoHeight > 0) {
         if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
           canvas.width = video.videoWidth
           canvas.height = video.videoHeight
+          drawn = undefined
         }
-        const { showSkeleton } = useLabStore.getState()
-        drawPose(context, showSkeleton ? poseRef.current : null, canvas.width, canvas.height)
+        const pose = useLabStore.getState().showSkeleton ? poseRef.current : null
+        // Poses arrive slower than display frames; repainting an identical overlay is pure cost.
+        if (pose !== drawn) {
+          drawn = pose
+          drawPose(context, pose, canvas.width, canvas.height)
+        }
       }
       frame = requestAnimationFrame(render)
     }

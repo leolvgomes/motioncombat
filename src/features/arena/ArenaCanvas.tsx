@@ -12,6 +12,7 @@ import { useSettingsStore } from '../../stores/settings-store'
 import type { FighterFrame, FighterId } from '../../types/combat'
 import type { ArenaId } from '../../types/customization'
 import { matchRuntime } from '../combat/match-runtime'
+import { FrameLimiter } from '../robot/FrameLimiter'
 import { RobotModel } from '../robot/RobotModel'
 import type { RobotRig } from '../robot/RobotModel'
 import { ARENA_THEMES } from './arena-themes'
@@ -467,12 +468,13 @@ function ArenaCanvas() {
   return <div className="arena-canvas-shell" role="img" aria-label="Arena 3D com o robô do jogador e um adversário de armadura cobre.">
     <ArenaBoundary key={revision} onRetry={retry}>
       {lost ? <ArenaFailure onRetry={retry}>A conexão com a GPU foi interrompida. Reabra a visualização e retome o combate pelos controles.</ArenaFailure>
-        : <Canvas key={revision} camera={{ position: [-7.4, 4.85, 5.7], fov: ARENA_CAMERA_FOV, near: 0.1, far: 100 }}
+        : <Canvas key={revision} frameloop="demand" camera={{ position: [-7.4, 4.85, 5.7], fov: ARENA_CAMERA_FOV, near: 0.1, far: 100 }}
           dpr={quality === 'light' ? 1 : [1, 1.5]} shadows={quality === 'balanced'}
           gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
           onCreated={({ gl }) => setCanvas(gl.domElement)}
           // Rendered inside the canvas element even when WebGL works, so it must have no side effects.
           fallback={<p>Ative a aceleração gráfica ou use um navegador com WebGL 2 para ver a arena.</p>}>
+          <FrameLimiter />
           <ArenaWorld light={quality === 'light'} />
         </Canvas>}
     </ArenaBoundary>

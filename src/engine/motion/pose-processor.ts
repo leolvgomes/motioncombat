@@ -18,6 +18,10 @@ export const LANDMARK_VISIBILITY_THRESHOLD = 0.5
 
 const ARM_LANDMARKS = [11, 12, 13, 14, 15, 16] as const
 const SMOOTHING_TIME_MS = 80
+const FAST_SMOOTHING_TIME_MS = 28
+// Shoulder widths per second. Below this, the full smoothing hides detection jitter.
+const FAST_MOTION_SPEED = 0.8
+const MIN_BODY_SCALE = 0.05
 const RESET_GAP_MS = 400
 const MIN_TORSO_HEIGHT = 0.0001
 
@@ -75,18 +79,48 @@ function framingStatus(
   return status === 'tracking' ? 'ready' : 'partial'
 }
 
+interface RawMotion {
+  readonly x: number
+  readonly y: number
+  readonly velocityX: number
+  readonly velocityY: number
+}
+
+/**
+ * Smoothing time for one landmark. It only shortens when two consecutive displacements agree, so a punch is
+ * followed closely while jitter and a single misplaced detection keep the full filter.
+ */
+export function smoothingTime(previous: Pick<RawMotion, 'velocityX' | 'velocityY'>, velocityX: number, velocityY: number, bodyScale: number): number {
+  const before = Math.hypot(previous.velocityX, previous.velocityY)
+  const now = Math.hypot(velocityX, velocityY)
+  if (before <= 0 || now <= 0) return SMOOTHING_TIME_MS
+  const alignment = (previous.velocityX * velocityX + previous.velocityY * velocityY) / (before * now)
+  const speed = Math.max(0, alignment) * Math.min(before, now) / Math.max(bodyScale, MIN_BODY_SCALE)
+  return Math.max(FAST_SMOOTHING_TIME_MS, SMOOTHING_TIME_MS / (1 + Math.max(0, speed - FAST_MOTION_SPEED)))
+}
+
+export interface PoseProcessorOptions {
+  /** Follow sustained fast motion with less delay. */
+  readonly adaptive?: boolean
+}
+
 /** Pure pose processing with no React, camera or inference dependency. */
 export class PoseProcessor {
   private previousTimestamp: number | null = null
   private lastUsableTimestamp: number | null = null
   private previousPoints: Landmark[] = []
   private lastSeenAt: (number | undefined)[] = []
+  private rawMotion: (RawMotion | undefined)[] = []
+  private readonly adaptive: boolean
+
+  constructor({ adaptive = true }: PoseProcessorOptions = {}) { this.adaptive = adaptive }
 
   reset(): void {
     this.previousTimestamp = null
     this.lastUsableTimestamp = null
     this.previousPoints = []
     this.lastSeenAt = []
+    this.rawMotion = []
   }
 
   process(frame: PoseFrame): ProcessedPose {
@@ -105,10 +139,12 @@ export class PoseProcessor {
     )) this.reset()
 
     const elapsed = this.previousTimestamp === null ? 0 : timestamp - this.previousTimestamp
-    const alpha = this.previousTimestamp === null ? 1 : -Math.expm1(-elapsed / SMOOTHING_TIME_MS)
+    const bodyScale = isVisible(points[11]) && isVisible(points[12]) ? Math.hypot(points[11]!.x - points[12]!.x, points[11]!.y - points[12]!.y) : 0
     const landmarks = points.map((point, index): Landmark => {
       const previous = this.previousPoints[index]
       const lastSeen = this.lastSeenAt[index]
+      const motion = this.rawMotion[index]
+      this.rawMotion[index] = undefined
       if (!isVisible(point)) {
         // Retain the last trustworthy position while current visibility immediately reflects the loss.
         return previous && lastSeen !== undefined
@@ -116,7 +152,13 @@ export class PoseProcessor {
           : point
       }
       this.lastSeenAt[index] = timestamp
+      const seconds = elapsed / 1000
+      const velocityX = motion && seconds > 0 ? (point.x - motion.x) / seconds : 0
+      const velocityY = motion && seconds > 0 ? (point.y - motion.y) / seconds : 0
+      this.rawMotion[index] = { x: point.x, y: point.y, velocityX, velocityY }
       if (!previous || lastSeen === undefined || timestamp - lastSeen > RESET_GAP_MS) return point
+      const time = this.adaptive && motion ? smoothingTime(motion, velocityX, velocityY, bodyScale) : SMOOTHING_TIME_MS
+      const alpha = -Math.expm1(-elapsed / time)
       return {
         x: previous.x + alpha * (point.x - previous.x),
         y: previous.y + alpha * (point.y - previous.y),
