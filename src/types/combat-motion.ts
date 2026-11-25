@@ -15,6 +15,9 @@ export interface CalibrationProfile {
   readonly neutralTorsoLean: number
   readonly guardLeft: MotionVector
   readonly guardRight: MotionVector
+  /** Calibrated upper-arm and forearm lengths in neutral shoulder widths; they reveal forward reach without depth. */
+  readonly upperArm: number
+  readonly forearm: number
 }
 
 export interface ArmMotionFeatures {
@@ -25,6 +28,10 @@ export interface ArmMotionFeatures {
   readonly extension: number
   /** Interior elbow angle in radians: 0 folded, PI straight. */
   readonly elbowAngle: number
+  /** Shoulder-to-wrist reach (0–1) rebuilt from 2D foreshortening and calibrated segment lengths. */
+  readonly reach: number
+  /** Elbow angle of the same 2D reconstruction, in radians. */
+  readonly reachAngle: number
   readonly wristAboveElbow: number
   readonly confidence: number
   /** This arm has a current, plausible world-space chain, independent of its velocity. */

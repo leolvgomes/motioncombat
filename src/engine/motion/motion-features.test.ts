@@ -28,6 +28,7 @@ function pose(timestamp = 0, changes: Partial<Record<number, Partial<Landmark>>>
 const PROFILE: CalibrationProfile = {
   capturedAt: 0, shoulderWidth: 0.3, worldShoulderWidth: 0.4, neutralTorsoLean: 0,
   guardLeft: { x: 0.33, y: 0.55, z: 0.4 }, guardRight: { x: -0.33, y: 0.55, z: 0.4 },
+  upperArm: 0.67, forearm: 0.67,
 }
 
 function depth(source: ProcessedPose, index: number, z: number): ProcessedPose {
@@ -125,6 +126,40 @@ describe('MotionFeatureExtractor', () => {
     expect(features.leftArm?.wrist.z).toBeCloseTo(1.375)
     const hidden = { ...source, landmarks: source.landmarks.map((point, index) => index === 15 ? { ...point, visibility: 0.2 } : point), worldLandmarks }
     expect(new MotionFeatureExtractor().update(hidden, PROFILE).leftArm).toBeNull()
+  })
+
+  it('recovers forward reach from 2D foreshortening and calibrated segment lengths', () => {
+    const straightDown = new MotionFeatureExtractor().update({ ...pose(), worldLandmarks: [] }, PROFILE)
+    expect(straightDown.leftArm?.reach).toBeCloseTo(1, 2)
+    expect(straightDown.leftArm?.reachAngle).toBeGreaterThan(3)
+    // Elbow at shoulder height and wrist barely beside it: the arm points at the camera.
+    const atCamera = pose(0, { 13: { x: 0.67, y: 0.4 }, 15: { x: 0.68, y: 0.39 } })
+    const forward = new MotionFeatureExtractor().update({ ...atCamera, worldLandmarks: [] }, PROFILE)
+    expect(forward.leftArm?.depthAvailable).toBe(false)
+    expect(forward.leftArm?.reach).toBeGreaterThan(0.97)
+    expect(forward.leftArm?.reachAngle).toBeGreaterThan(2.8)
+    // Guard: upper arm hanging partly forward, forearm raised in the image plane.
+    const guard = pose(0, { 13: { x: 0.66, y: 0.55 }, 15: { x: 0.64, y: 0.35 } })
+    const guarded = new MotionFeatureExtractor().update({ ...guard, worldLandmarks: [] }, PROFILE)
+    expect(guarded.leftArm?.reach).toBeLessThan(0.6)
+    expect(guarded.leftArm?.reachAngle).toBeLessThan(1.6)
+  })
+
+  it('keeps a 2D arm that fully collapses toward the camera when calibrated lengths exist', () => {
+    const collapsed = pose(0, { 13: { x: 0.65, y: 0.4 }, 15: { x: 0.650001, y: 0.400001 } })
+    const features = new MotionFeatureExtractor().update({ ...collapsed, worldLandmarks: [] }, PROFILE)
+    expect(features.leftArm).not.toBeNull()
+    expect(features.leftArm?.reach).toBeCloseTo(1)
+    expect(features.leftArm?.extension).toBeCloseTo(1)
+    expect(features.leftArm?.elbowAngle).toBeCloseTo(Math.PI)
+    const uncalibrated = { ...PROFILE, upperArm: Number.NaN }
+    expect(new MotionFeatureExtractor().update({ ...collapsed, worldLandmarks: [] }, uncalibrated).leftArm).toBeNull()
+  })
+
+  it('keeps full reach when a torso rotation narrows the shoulders mid-punch', () => {
+    const rotated = pose(0, { 11: { x: 0.62 }, 12: { x: 0.38 }, 13: { x: 0.64, y: 0.4 }, 15: { x: 0.65, y: 0.39 } })
+    const features = new MotionFeatureExtractor().update({ ...rotated, worldLandmarks: [] }, PROFILE)
+    expect(features.leftArm?.reach).toBeGreaterThan(0.95)
   })
 
   it.each([Number.NaN, Number.POSITIVE_INFINITY, -10])('rejects non-finite or implausible world wrist depth %s', (z) => {

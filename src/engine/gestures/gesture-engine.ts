@@ -23,24 +23,27 @@ export interface GestureContext {
 }
 
 interface ArmHistory {
-  origin: MotionVector | null
-  originExtension: number
+  /** The arm has pulled back and may throw the next punch. */
+  armed: boolean
+  /** Lowest reach of the current attempt and when it was seen. */
+  originReach: number
   originTime: number
-  previousExtension: number | null
-  forwardSamples: number
+  /** Highest reach since the last punch; Infinity when no punch is pending release. */
+  peakReach: number
   cooldownUntil: number
 }
 
 const MIN_CONFIDENCE = 0.6
 const MAX_SAMPLE_GAP_MS = 250
-const PUNCH_COOLDOWN_MS = 500
-const PUNCH_WINDOW_MS = 350
-const MIN_PUNCH_WINDOW_MS = 60
-const MIN_FORWARD_SPEED = 1.2
-const MIN_FORWARD_TRAVEL = 0.18
-const MIN_EXTENSION_GAIN = 0.18
-const PUNCH_EXTENSION = 0.8
-const RETRACTED_EXTENSION = 0.64
+const PUNCH_COOLDOWN_MS = 350
+// Gain over window sets the slowest accepted punch: 0.5 reach per second.
+const PUNCH_WINDOW_MS = 400
+const PUNCH_REACH = 0.8
+const PUNCH_ELBOW_ANGLE = 2.3
+const MIN_REACH_GAIN = 0.2
+const RELEASE_DROP = 0.12
+const PUNCH_LOWEST_WRIST = -0.6
+const PUNCH_HIGHEST_WRIST = 1.2
 const GUARD_DWELL_MS = 150
 const DODGE_DWELL_MS = 100
 const RELEASE_DWELL_MS = 90
@@ -49,7 +52,7 @@ const DODGE_ENTER_RADIANS = 0.18
 const DODGE_EXIT_RADIANS = 0.11
 
 function armHistory(): ArmHistory {
-  return { origin: null, originExtension: 0, originTime: 0, previousExtension: null, forwardSamples: 0, cooldownUntil: 0 }
+  return { armed: false, originReach: 0, originTime: 0, peakReach: Infinity, cooldownUntil: 0 }
 }
 
 function finiteVector(vector: MotionVector): boolean {
@@ -61,6 +64,8 @@ function usableArm(arm: ArmMotionFeatures | null): ArmMotionFeatures | null {
     && Number.isFinite(arm.confidence) && arm.confidence >= MIN_CONFIDENCE && arm.confidence <= 1
     && Number.isFinite(arm.extension) && arm.extension >= 0 && arm.extension <= 1
     && Number.isFinite(arm.elbowAngle) && arm.elbowAngle >= 0 && arm.elbowAngle <= Math.PI
+    && Number.isFinite(arm.reach) && arm.reach >= 0 && arm.reach <= 1
+    && Number.isFinite(arm.reachAngle) && arm.reachAngle >= 0 && arm.reachAngle <= Math.PI
     && Number.isFinite(arm.wristAboveElbow) ? arm : null
 }
 
@@ -84,17 +89,16 @@ function nearGuard(arm: ArmMotionFeatures | null, reference: MotionVector, holdi
 }
 
 function clearArm(history: ArmHistory): void {
-  history.origin = null
-  history.originExtension = 0
+  history.armed = false
+  history.originReach = 0
   history.originTime = 0
-  history.previousExtension = null
-  history.forwardSamples = 0
+  history.peakReach = Infinity
 }
 
 /**
  * Heuristics consume body-relative geometry, independently of React, the webcam and
- * display mirroring. Straight punches deliberately require trustworthy 3D evidence;
- * sideways or depth-free wrist motion is insufficient to claim a forward punch.
+ * display mirroring. Punches use the calibrated 2D reach reconstruction, so an
+ * ordinary webcam without trustworthy depth still recognizes a punch at the camera.
  */
 export class GestureEngine {
   private readonly left = armHistory()
@@ -141,14 +145,9 @@ export class GestureEngine {
 
     const left = usableArm(features.leftArm)
     const right = usableArm(features.rightArm)
-    const leftPunch = this.punch(this.left, left, context.profile.guardLeft, features, 'PUNCH_LEFT')
-    const rightPunch = this.punch(this.right, right, context.profile.guardRight, features, 'PUNCH_RIGHT')
+    const leftPunch = this.punch(this.left, left, features, 'PUNCH_LEFT')
+    const rightPunch = this.punch(this.right, right, features, 'PUNCH_RIGHT')
     const punch = leftPunch ?? rightPunch
-    if (punch) {
-      const history = punch.type === 'PUNCH_LEFT' ? this.left : this.right
-      clearArm(history)
-      history.cooldownUntil = timestamp + PUNCH_COOLDOWN_MS
-    }
     const postureEvent = this.updatePosture(features, left, right, context.profile, punch === null)
     return this.snapshot(punch ?? postureEvent)
   }
@@ -166,52 +165,51 @@ export class GestureEngine {
     return { posture: this.posture, event }
   }
 
+  /**
+   * One punch per extension: the reach must rise quickly from a bent arm to a nearly
+   * straight one at upper-body height, then drop again before the next punch.
+   */
   private punch(
     history: ArmHistory,
     arm: ArmMotionFeatures | null,
-    guard: MotionVector,
     features: MotionFeatures,
     type: 'PUNCH_LEFT' | 'PUNCH_RIGHT',
   ): GestureEvent | null {
-    if (!arm || !features.depthAvailable || !arm.depthAvailable) {
+    if (!arm) {
       clearArm(history)
       return null
     }
-    const previousExtension = history.previousExtension
-    history.previousExtension = arm.extension
-    const retracted = arm.extension <= RETRACTED_EXTENSION
-      || arm.extension <= 0.72 && nearGuard(arm, guard, false)
-    if (retracted) {
-      history.origin = { ...arm.wrist }
-      history.originExtension = arm.extension
-      history.originTime = features.timestamp
-      history.forwardSamples = 0
+    const timestamp = features.timestamp
+    if (!history.armed) {
+      // An arm that starts extended, or just punched, must pull back first.
+      history.peakReach = Math.max(history.peakReach, arm.reach)
+      if (arm.reach >= PUNCH_REACH || history.peakReach - arm.reach < RELEASE_DROP) return null
+      history.armed = true
+      history.originReach = arm.reach
+      history.originTime = timestamp
       return null
     }
-    const origin = history.origin
-    if (!origin || previousExtension === null) return null
-
-    const elapsed = features.timestamp - history.originTime
-    if (elapsed > PUNCH_WINDOW_MS) {
-      clearArm(history)
+    if (arm.reach <= history.originReach || timestamp - history.originTime > PUNCH_WINDOW_MS) {
+      if (arm.reach < PUNCH_REACH) {
+        history.originReach = arm.reach
+        history.originTime = timestamp
+      } else {
+        // A slow push that reached full extension never counts.
+        history.armed = false
+        history.peakReach = arm.reach
+      }
       return null
     }
-    const rising = arm.extension - previousExtension >= 0.008
-    const movingForward = features.depthAvailable && arm.forwardEvidence
-      && arm.velocity.z >= MIN_FORWARD_SPEED
-      && arm.velocity.z >= Math.abs(arm.velocity.x) * 1.1
-      && arm.velocity.z >= Math.abs(arm.velocity.y) * 0.8
-    history.forwardSamples = rising && movingForward ? history.forwardSamples + 1 : 0
-    const forwardTravel = arm.wrist.z - origin.z
-    if (features.timestamp < history.cooldownUntil
-      || elapsed < MIN_PUNCH_WINDOW_MS || history.forwardSamples < 2
-      || arm.extension < PUNCH_EXTENSION || arm.elbowAngle < 2.35
-      || arm.extension - history.originExtension < MIN_EXTENSION_GAIN
-      || forwardTravel < MIN_FORWARD_TRAVEL
-      || forwardTravel < Math.abs(arm.wrist.x - origin.x) * 0.65
-      || forwardTravel < Math.abs(arm.wrist.y - origin.y) * 0.65) return null
+    if (arm.reach < PUNCH_REACH || arm.reachAngle < PUNCH_ELBOW_ANGLE
+      || arm.reach - history.originReach < MIN_REACH_GAIN
+      || arm.wrist.y < PUNCH_LOWEST_WRIST || arm.wrist.y > PUNCH_HIGHEST_WRIST) return null
 
-    return { type, timestamp: features.timestamp, confidence: Math.min(features.confidence, arm.confidence) }
+    // The extension is spent even inside the cooldown, so it can never fire late.
+    history.armed = false
+    history.peakReach = arm.reach
+    if (timestamp < history.cooldownUntil) return null
+    history.cooldownUntil = timestamp + PUNCH_COOLDOWN_MS
+    return { type, timestamp, confidence: Math.min(features.confidence, arm.confidence) }
   }
 
   private updatePosture(

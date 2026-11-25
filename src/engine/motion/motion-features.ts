@@ -13,6 +13,11 @@ interface MeasuredArm {
   readonly wrist: MotionVector
   readonly extension: number
   readonly elbowAngle: number
+  readonly reach: number
+  readonly reachAngle: number
+  /** Projected segment lengths in current shoulder widths, used by calibration. */
+  readonly upperLength: number
+  readonly forearmLength: number
   readonly wristAboveElbow: number
   readonly confidence: number
   readonly depth: boolean
@@ -76,12 +81,36 @@ function armGeometry(shoulder: MotionVector, elbow: MotionVector, wrist: MotionV
   }
 }
 
+/**
+ * A webcam has no reliable depth, but a segment pointing at the camera looks shorter.
+ * Each hidden forward component follows from the calibrated length (Pythagoras).
+ * Arms are assumed to point toward the camera, never behind the body.
+ */
+function reconstructArm(shoulder: MotionVector, elbow: MotionVector, wrist: MotionVector, upper: number, forearm: number, scale: number) {
+  const ux = (elbow.x - shoulder.x) * scale, uy = (elbow.y - shoulder.y) * scale
+  const fx = (wrist.x - elbow.x) * scale, fy = (wrist.y - elbow.y) * scale
+  const upperLength = Math.max(upper, Math.hypot(ux, uy))
+  const forearmLength = Math.max(forearm, Math.hypot(fx, fy))
+  const uz = Math.sqrt(Math.max(0, upperLength * upperLength - ux * ux - uy * uy))
+  const fz = Math.sqrt(Math.max(0, forearmLength * forearmLength - fx * fx - fy * fy))
+  return {
+    extension: clamp(Math.hypot(ux + fx, uy + fy, uz + fz) / (upperLength + forearmLength), 0, 1),
+    elbowAngle: Math.acos(clamp(-(ux * fx + uy * fy + uz * fz) / (upperLength * forearmLength), -1, 1)),
+  }
+}
+
+function usableLengths(profile: CalibrationProfile | undefined): profile is CalibrationProfile {
+  return profile !== undefined && Number.isFinite(profile.upperArm) && profile.upperArm > 0
+    && Number.isFinite(profile.forearm) && profile.forearm > 0
+}
+
 function measureArm(
   pose: ProcessedPose,
   indices: readonly [number, number, number],
   center: MotionVector,
   width: number,
   worldWidth: number | null,
+  profile?: CalibrationProfile,
 ): MeasuredArm | null {
   const [shoulderIndex, elbowIndex, wristIndex] = indices
   const shoulder = pose.landmarks[shoulderIndex]
@@ -90,6 +119,11 @@ function measureArm(
   if (!imagePoint(shoulder) || !imagePoint(elbow) || !imagePoint(wrist)) return null
   const normalized = (point: Landmark): MotionVector => ({ x: (point.x - center.x) / width, y: (center.y - point.y) / width, z: 0 })
   const imageGeometry = armGeometry(normalized(shoulder), normalized(elbow), normalized(wrist))
+  // Torso rotation narrows the shoulders mid-punch; never let that inflate the arm.
+  const reconstructed = usableLengths(profile)
+    ? reconstructArm(normalized(shoulder), normalized(elbow), normalized(wrist), profile.upperArm, profile.forearm,
+      width / Math.max(width, profile.shoulderWidth * 0.85))
+    : null
 
   const worldShoulder = pose.worldLandmarks[shoulderIndex]
   const worldElbow = pose.worldLandmarks[elbowIndex]
@@ -114,14 +148,22 @@ function measureArm(
       }
     }
   }
-  // A genuine forward punch can collapse to almost one image point. The valid
-  // world chain must take precedence over 2D projection length in that case.
-  if (!depth && (imageGeometry.upperLength < 0.06 || imageGeometry.forearmLength < 0.06
-    || imageGeometry.upperLength > 3 || imageGeometry.forearmLength > 3)) return null
+  if (imageGeometry.upperLength > 3 || imageGeometry.forearmLength > 3) return null
+  // A genuine forward punch can collapse to almost one image point. A valid world
+  // chain or the calibrated reconstruction must then replace the 2D projection.
+  const collapsed = imageGeometry.upperLength < 0.06 || imageGeometry.forearmLength < 0.06
+  if (!depth && collapsed) {
+    if (!reconstructed) return null
+    geometry = { ...imageGeometry, ...reconstructed }
+  }
   return {
     wrist: { ...normalized(wrist), z: depth ? z : 0 },
     extension: geometry.extension,
     elbowAngle: geometry.elbowAngle,
+    reach: reconstructed?.extension ?? geometry.extension,
+    reachAngle: reconstructed?.elbowAngle ?? geometry.elbowAngle,
+    upperLength: imageGeometry.upperLength,
+    forearmLength: imageGeometry.forearmLength,
     wristAboveElbow: (elbow.y - wrist.y) / width,
     confidence: Math.min(shoulder.visibility, elbow.visibility, wrist.visibility),
     depth,
@@ -143,8 +185,8 @@ export function measureMotionPose(pose: ProcessedPose, profile?: CalibrationProf
   const center = { x: (left.x + right.x) / 2, y: (left.y + right.y) / 2, z: 0 }
   const worldWidth = worldShoulderWidth(pose, profile)
   const nose = pose.landmarks[0]
-  const leftArm = measureArm(pose, [11, 13, 15], center, width, worldWidth)
-  const rightArm = measureArm(pose, [12, 14, 16], center, width, worldWidth)
+  const leftArm = measureArm(pose, [11, 13, 15], center, width, worldWidth, profile)
+  const rightArm = measureArm(pose, [12, 14, 16], center, width, worldWidth, profile)
   const rawLean = pose.torsoLean !== null && Number.isFinite(pose.torsoLean)
     ? pose.torsoLean : Math.atan2(left.y - right.y, Math.abs(left.x - right.x))
   return {
@@ -210,6 +252,7 @@ export class MotionFeatureExtractor {
       const velocity = smoothVelocity(arm, previous, elapsed)
       return {
         wrist: arm.wrist, velocity, extension: arm.extension, elbowAngle: arm.elbowAngle,
+        reach: arm.reach, reachAngle: arm.reachAngle,
         wristAboveElbow: arm.wristAboveElbow, confidence: Math.min(body.confidence, arm.confidence),
         depthAvailable: arm.depth,
         forwardEvidence: arm.depth && velocity.z > 0.25 && arm.wrist.z > 0.08,

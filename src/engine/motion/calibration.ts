@@ -10,6 +10,8 @@ interface NeutralReference {
   readonly shoulderWidth: number
   readonly worldShoulderWidth: number | null
   readonly torsoLean: number
+  readonly upperArm: number
+  readonly forearm: number
 }
 
 const NEUTRAL_HOLD_MS = 1500
@@ -21,7 +23,7 @@ const GUARD_MESSAGE = 'Eleve os dois punhos próximos ao rosto, com os cotovelos
 
 function newAccumulator() {
   return {
-    count: 0, shoulderWidth: 0, worldShoulderWidth: 0, worldCount: 0, torsoLean: 0,
+    count: 0, shoulderWidth: 0, worldShoulderWidth: 0, worldCount: 0, torsoLean: 0, upperArm: 0, forearm: 0,
     left: { x: 0, y: 0, z: 0, depthCount: 0 },
     right: { x: 0, y: 0, z: 0, depthCount: 0 },
   }
@@ -48,6 +50,11 @@ function guardPosture(body: BodyMeasurement, reference: NeutralReference): boole
     && arm.wrist.y >= head.y - 0.8 && arm.wrist.y <= head.y + 0.6
     && Math.abs(arm.wrist.x - head.x) <= 1.1
     && arm.wristAboveElbow >= 0.1 && arm.extension < 0.95)
+}
+
+function segmentLength(neutral: number, guard: number, low: number, high: number): number {
+  const longest = Math.max(Number.isFinite(neutral) ? neutral : 0, Number.isFinite(guard) ? guard : 0)
+  return Math.max(low, Math.min(high, longest))
 }
 
 function stable(previous: HoldSample, current: HoldSample): boolean {
@@ -122,6 +129,8 @@ export class MotionCalibrator {
         shoulderWidth: sum.shoulderWidth / sum.count,
         worldShoulderWidth: sum.worldCount >= sum.count * 0.8 ? sum.worldShoulderWidth / sum.worldCount : null,
         torsoLean: sum.torsoLean / sum.count,
+        upperArm: sum.upperArm / sum.count,
+        forearm: sum.forearm / sum.count,
       }
       this.clearHold()
       this.current = { stage: 'guard', progress: 0, profile: null, message: GUARD_MESSAGE }
@@ -141,6 +150,10 @@ export class MotionCalibrator {
       neutralTorsoLean: neutral.torsoLean,
       guardLeft: guardPosition(sum.left),
       guardRight: guardPosition(sum.right),
+      // Each segment lies flattest in one posture (upper arm hanging, forearm raised),
+      // so the longer average of both holds is the truest length.
+      upperArm: segmentLength(neutral.upperArm, sum.upperArm / sum.count, 0.55, 1.6),
+      forearm: segmentLength(neutral.forearm, sum.forearm / sum.count, 0.45, 1.5),
     }
     this.current = { stage: 'complete', progress: 1, profile, message: 'Calibração concluída. Seus movimentos estão prontos para análise.' }
     this.clearHold()
@@ -165,6 +178,8 @@ export class MotionCalibrator {
     sum.count += 1
     sum.shoulderWidth += body.shoulderWidth
     sum.torsoLean += body.torsoLean
+    sum.upperArm += (body.leftArm.upperLength + body.rightArm.upperLength) / 2
+    sum.forearm += (body.leftArm.forearmLength + body.rightArm.forearmLength) / 2
     if (body.worldShoulderWidth !== null && body.leftArm.depth && body.rightArm.depth) {
       sum.worldShoulderWidth += body.worldShoulderWidth
       sum.worldCount += 1

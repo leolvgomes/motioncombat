@@ -63,6 +63,9 @@ describe('MotionCalibrator', () => {
     expect(result.profile?.guardLeft.y).toBeCloseTo(0.16 / 0.3)
     expect(result.profile?.guardLeft.z).toBeCloseTo(0.375)
     expect(result.profile?.guardRight.x).toBeCloseTo(-1 / 3)
+    // Upper arm is truest while hanging (neutral), forearm while raised (guard).
+    expect(result.profile?.upperArm).toBeCloseTo(Math.hypot(0.01, 0.2) / 0.3)
+    expect(result.profile?.forearm).toBeCloseTo(Math.hypot(0.08, 0.29) / 0.3)
   })
 
   it('cannot complete neutral while the player is already holding guard', () => {
