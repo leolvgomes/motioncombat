@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_FEEDBACK, SETTINGS_STORAGE_KEY, parseFeedbackSettings, useSettingsStore } from '../../stores/settings-store'
-import { announcementForEvent } from './announcements'
+import { announcementForEvent, attackLabel } from './announcements'
 import { QualityAdvisor } from './quality-advisor'
 
 describe('match announcements', () => {
@@ -9,14 +9,14 @@ describe('match announcements', () => {
     expect(announcementForEvent({ type: 'countdown', round: 1, value: 2 })).toBeNull()
     expect(announcementForEvent({ type: 'fight', round: 2 })).toBe('Round 2. Lutem!')
     const impact = (result: 'hit' | 'blocked' | 'dodged' | 'miss') => announcementForEvent({
-      type: 'impact', impact: { id: 1, attacker: 'opponent', result, damage: 12 }, position: [0, 0, 0], defenderHealth: 63.2,
+      type: 'impact', impact: { id: 1, attacker: 'opponent', kind: 'straight', result, damage: 12 }, position: [0, 0, 0], defenderHealth: 63.2,
     })
     expect(impact('hit')).toBe('ATLAS-01 atingido. Integridade 64.')
     expect(impact('blocked')).toBe('ATLAS-01 bloqueou. Integridade 64.')
     expect(impact('dodged')).toBe('ATLAS-01 esquivou.')
     expect(impact('miss')).toBeNull()
-    expect(announcementForEvent({ type: 'attack', fighter: 'player', side: 'left' })).toBeNull()
-    expect(announcementForEvent({ type: 'telegraph', fighter: 'opponent', side: 'left' })).toBeNull()
+    expect(announcementForEvent({ type: 'attack', fighter: 'player', side: 'left', kind: 'straight' })).toBeNull()
+    expect(announcementForEvent({ type: 'telegraph', fighter: 'opponent', side: 'left', kind: 'straight' })).toBeNull()
   })
 
   it('explains how each round and the match ended', () => {
@@ -25,6 +25,16 @@ describe('match announcements', () => {
     expect(announcementForEvent({ type: 'round-end', round: 3, winner: 'draw', knockout: false })).toBe('Round 3 empatado.')
     expect(announcementForEvent({ type: 'match-end', winner: 'opponent', mode: 'webcam' })).toBe('Fim de partida. VULCAN-07 venceu.')
     expect(announcementForEvent({ type: 'match-end', winner: 'draw', mode: 'demo' })).toBe('Partida empatada.')
+  })
+})
+
+describe('custom names and combos', () => {
+  it('uses the given names and describes a combo with its bonus', () => {
+    const names = { player: 'TROVÃO', opponent: 'VULCAN-07' }
+    expect(announcementForEvent({ type: 'combo', combo: { id: 1, fighter: 'player', combo: 'one-two', bonus: 3 } }, names)).toBe('Combo Um-dois de TROVÃO. Mais 3 de dano.')
+    expect(announcementForEvent({ type: 'match-end', winner: 'player', mode: 'webcam' }, names)).toBe('Fim de partida. TROVÃO venceu.')
+    expect(attackLabel('hook', 'left')).toBe('gancho esquerdo')
+    expect(attackLabel('uppercut', 'right')).toBe('uppercut direito')
   })
 })
 

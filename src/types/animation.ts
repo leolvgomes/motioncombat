@@ -1,7 +1,8 @@
 import type { RigJointName, RigPose } from './robot'
 
-export type AnimationState = 'IDLE' | 'TRACKING' | 'GUARD' | 'DODGE' | 'PUNCH_LEFT' | 'PUNCH_RIGHT' | 'RETURNING'
+export type AnimationState = 'IDLE' | 'TRACKING' | 'GUARD' | 'DODGE' | 'PUNCH_LEFT' | 'PUNCH_RIGHT' | 'HOOK' | 'UPPERCUT' | 'RETURNING'
 export type AttackSide = 'left' | 'right'
+export type AttackKind = 'straight' | 'hook' | 'uppercut'
 export type AttackPhase = 'windup' | 'strike' | 'recovery'
 
 export interface PunchClipOptions {

@@ -3,7 +3,7 @@ import type { CombatEvent, ImpactEvent } from '../../types/combat'
 import { CameraShake, ImpactParticles, ImpactPulses, impactFeedback } from './impact-effects'
 
 function impactEvent(result: ImpactEvent['result'], attacker: ImpactEvent['attacker'] = 'player', defenderHealth = 60): Extract<CombatEvent, { type: 'impact' }> {
-  return { type: 'impact', impact: { id: 1, attacker, result, damage: 12 }, position: [0, 1.3, 0.4], defenderHealth }
+  return { type: 'impact', impact: { id: 1, attacker, kind: 'straight', result, damage: 12 }, position: [0, 1.3, 0.4], defenderHealth }
 }
 
 describe('ImpactParticles', () => {

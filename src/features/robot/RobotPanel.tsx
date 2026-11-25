@@ -2,7 +2,9 @@ import { Component, Suspense, lazy, useState } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
 import { Bot, Box, Camera, ChevronDown, CircleAlert, Eye, Gauge, LoaderCircle, Pause, Play, RotateCcw, ScanLine } from 'lucide-react'
 import { useLabStore } from '../../stores/lab-store'
+import { useRobotName } from '../../stores/profile-store'
 import { useRobotStore } from '../../stores/robot-store'
+import { attackLabel } from '../combat/announcements'
 import { useAnimationStore } from '../../stores/animation-store'
 import type { RobotQuality } from '../../stores/robot-store'
 
@@ -48,32 +50,35 @@ export function RobotPanel() {
   const animationState = useAnimationStore((state) => state.snapshot?.state ?? null)
   const animationPhase = useAnimationStore((state) => state.snapshot?.phase ?? null)
   const animationSide = useAnimationStore((state) => state.snapshot?.attackSide ?? null)
+  const animationKind = useAnimationStore((state) => state.snapshot?.attackKind ?? null)
+  const robotName = useRobotName()
   const animationSource = useAnimationStore((state) => state.snapshot?.source ?? null)
   const [sceneAttempt, setSceneAttempt] = useState(0)
   const demonstration = mode === 'demo'
   const connecting = ['requesting', 'loading', 'starting'].includes(sessionStatus)
   const matchingAnimationSource = animationSource === (demonstration ? 'demo' : 'gesture')
   const punching = matchingAnimationSource && animationSide !== null
-    && (animationState === 'PUNCH_LEFT' || animationState === 'PUNCH_RIGHT')
+    && (animationState === 'PUNCH_LEFT' || animationState === 'PUNCH_RIGHT' || animationState === 'HOOK' || animationState === 'UPPERCUT')
   const returning = matchingAnimationSource && animationState === 'RETURNING'
   const animating = punching || returning
-  const punchSide = animationSide === 'left' ? 'esquerdo' : 'direito'
+  const attack = attackLabel(animationKind ?? 'straight', animationSide ?? 'left')
+  const attackTitle = attack.charAt(0).toUpperCase() + attack.slice(1)
   const punchPhase = animationPhase === 'windup' ? 'preparação'
     : animationPhase === 'strike' ? 'extensão' : 'recolhimento'
   const status = demonstration ? paused ? 'Demonstração pausada'
-    : punching ? `Demonstração · soco ${punchSide}`
+    : punching ? `Demonstração · ${attack}`
       : returning ? 'Demonstração · retorno' : 'Demonstração'
-    : punching ? `Soco ${punchSide} do robô`
+    : punching ? `${attackTitle} do robô`
       : returning ? 'Retornando ao corpo'
         : sourceStatus === 'tracking' ? 'Espelhamento ativo'
       : sourceStatus === 'partial' ? 'Visibilidade parcial'
         : sourceStatus === 'lost' ? 'Sinal interrompido'
           : connecting ? 'Conectando câmera' : 'Aguardando movimento'
   const hint = demonstration ? paused ? 'Demonstração pausada. Continue quando quiser.'
-    : punching ? `Movimento programado · soco ${punchSide} do robô (${punchPhase}).`
+    : punching ? `Movimento programado · ${attack} do robô (${punchPhase}).`
       : returning ? 'Movimento programado · retorno suave à pose de demonstração.'
         : 'Movimentos programados · nenhum dado de webcam.'
-    : punching ? `Soco ${punchSide} do robô · ${punchPhase}.`
+    : punching ? `${attackTitle} do robô · ${punchPhase}.`
       : returning ? 'Retornando suavemente ao espelhamento do seu corpo.'
         : sourceStatus === 'tracking' ? 'Seus braços e tronco, sincronizados em tempo real.'
       : sourceStatus === 'partial' ? 'Mantenha ombros, cotovelos e punhos visíveis.'
@@ -84,7 +89,7 @@ export function RobotPanel() {
     <div className="panel-heading">
       <div>
         <span className="panel-eyebrow"><Bot size={13} aria-hidden="true" />ESPELHAMENTO 3D</span>
-        <h2 className="panel-title" id="robot-title">Unidade ATLAS-01</h2>
+        <h2 className="panel-title" id="robot-title">Unidade {robotName}</h2>
       </div>
       <span className={`robot-status ${demonstration ? 'is-demo' : animating ? 'is-animating' : sourceStatus === 'tracking' ? 'is-active' : ''}`} role="status"><span className="status-dot" />{status}</span>
     </div>

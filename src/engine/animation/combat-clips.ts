@@ -1,5 +1,5 @@
 import { MathUtils, Quaternion, Vector3 } from 'three'
-import type { AttackSide, CombatClipSample, HitWindow, PunchClipOptions, PunchClipSampler } from '../../types/animation'
+import type { AttackKind, AttackSide, CombatClipSample, HitWindow, PunchClipOptions, PunchClipSampler } from '../../types/animation'
 import type { QuaternionTuple, RigJointName, RigPose } from '../../types/robot'
 
 export type { PunchClipSampler } from '../../types/animation'
@@ -14,6 +14,26 @@ export const PUNCH_CLIP_CONFIG = Object.freeze({
   intensity: Object.freeze({ min: 0.6, max: 1.3 }),
   windupWeight: 0.35,
   torsoWeight: 0.25,
+})
+
+interface ClipTiming {
+  readonly timing: { readonly windupEnd: number; readonly impactAt: number; readonly strikeEnd: number; readonly duration: number }
+  readonly hitWindow: HitWindow
+  readonly windupWeight: number
+  readonly torsoWeight: number
+}
+
+/** Heavier attacks commit for longer and recruit more of the torso. */
+export const ATTACK_CLIP_CONFIG: Readonly<Record<AttackKind, ClipTiming>> = Object.freeze({
+  straight: PUNCH_CLIP_CONFIG,
+  hook: Object.freeze({
+    timing: Object.freeze({ windupEnd: 0.12, impactAt: 0.2, strikeEnd: 0.31, duration: 0.68 }),
+    hitWindow: Object.freeze({ start: 0.18, end: 0.3 }), windupWeight: 0.45, torsoWeight: 0.6,
+  }),
+  uppercut: Object.freeze({
+    timing: Object.freeze({ windupEnd: 0.14, impactAt: 0.22, strikeEnd: 0.34, duration: 0.78 }),
+    hitWindow: Object.freeze({ start: 0.2, end: 0.33 }), windupWeight: 0.45, torsoWeight: 0.45,
+  }),
 })
 
 const DOWN = new Vector3(0, -1, 0)
@@ -53,15 +73,16 @@ export function normalizePunchOptions(options: PunchClipOptions = DEFAULT_PUNCH_
   }
 }
 
-export function getPunchDuration(options: PunchClipOptions = DEFAULT_PUNCH_OPTIONS): number {
-  return PUNCH_CLIP_CONFIG.timing.duration * normalizePunchOptions(options).durationScale
+export function getPunchDuration(options: PunchClipOptions = DEFAULT_PUNCH_OPTIONS, kind: AttackKind = 'straight'): number {
+  return ATTACK_CLIP_CONFIG[kind].timing.duration * normalizePunchOptions(options).durationScale
 }
 
-export function getPunchHitWindow(options: PunchClipOptions = DEFAULT_PUNCH_OPTIONS): HitWindow {
+export function getPunchHitWindow(options: PunchClipOptions = DEFAULT_PUNCH_OPTIONS, kind: AttackKind = 'straight'): HitWindow {
   const { durationScale } = normalizePunchOptions(options)
+  const { hitWindow } = ATTACK_CLIP_CONFIG[kind]
   return {
-    start: PUNCH_CLIP_CONFIG.hitWindow.start * durationScale,
-    end: PUNCH_CLIP_CONFIG.hitWindow.end * durationScale,
+    start: hitWindow.start * durationScale,
+    end: hitWindow.end * durationScale,
   }
 }
 
@@ -110,9 +131,49 @@ export function createCombatGuardPose(): RigPose {
   }
 }
 
-function attackKeyframe(side: AttackSide, intensity: number, stage: 'windup' | 'impact'): RigPose {
+type ClipStage = 'windup' | 'impact' | 'follow'
+
+/** Authored for the left arm; X is mirrored for the right one. */
+interface SwingStage {
+  readonly yaw: number
+  readonly roll: number
+  readonly upper: readonly [number, number, number]
+  readonly forearm: readonly [number, number, number]
+}
+
+const SWING_STAGES: Readonly<Record<'hook' | 'uppercut', Readonly<Record<ClipStage, SwingStage>>>> = {
+  hook: {
+    windup: { yaw: 0.22, roll: 0, upper: [0.72, -0.3, 0.62], forearm: [0.12, 0.12, 0.98] },
+    impact: { yaw: -0.34, roll: 0.04, upper: [0.58, -0.02, 0.81], forearm: [-0.52, 0.06, 0.85] },
+    follow: { yaw: -0.56, roll: 0.05, upper: [0.3, 0, 0.95], forearm: [-0.84, 0.04, 0.54] },
+  },
+  uppercut: {
+    windup: { yaw: 0.14, roll: -0.12, upper: [-0.05, -0.96, 0.27], forearm: [-0.12, -0.12, 0.98] },
+    impact: { yaw: -0.26, roll: 0.06, upper: [-0.2, -0.42, 0.88], forearm: [-0.25, 0.72, 0.64] },
+    follow: { yaw: -0.3, roll: 0.1, upper: [-0.2, 0.08, 0.98], forearm: [-0.18, 0.94, 0.3] },
+  },
+}
+
+function swingKeyframe(kind: 'hook' | 'uppercut', side: AttackSide, intensity: number, stage: ClipStage): RigPose {
   const sign = side === 'left' ? 1 : -1
-  const impact = stage === 'impact'
+  const { yaw, roll, upper, forearm } = SWING_STAGES[kind][stage]
+  const torso = new Quaternion().setFromAxisAngle(Y_AXIS, sign * intensity * yaw)
+    .multiply(new Quaternion().setFromAxisAngle(Z_AXIS, sign * intensity * roll))
+  const arm = authorArm(new Vector3(sign * upper[0], upper[1], upper[2]), new Vector3(sign * forearm[0], forearm[1], forearm[2]),
+    torso, sign * intensity * (kind === 'hook' ? 0.3 : -0.2))
+  return {
+    ...GUARD_POSE, torso: tuple(torso),
+    [`${side}Shoulder`]: arm.shoulder,
+    [`${side}Elbow`]: arm.elbow,
+    [`${side}Wrist`]: arm.wrist,
+  }
+}
+
+function attackKeyframe(kind: AttackKind, side: AttackSide, intensity: number, stage: ClipStage): RigPose {
+  if (kind !== 'straight') return swingKeyframe(kind, side, intensity, stage)
+  const sign = side === 'left' ? 1 : -1
+  // A straight punch holds its full extension; it has no separate follow-through.
+  const impact = stage !== 'windup'
   const torso = new Quaternion().setFromAxisAngle(Y_AXIS, sign * intensity * (impact ? -0.11 : 0.025))
     .multiply(new Quaternion().setFromAxisAngle(Z_AXIS, sign * intensity * (impact ? 0.025 : -0.01)))
   const upper = impact
@@ -132,8 +193,7 @@ function smooth(amount: number): number {
   return MathUtils.smootherstep(amount, 0, 1)
 }
 
-function armWeight(time: number): number {
-  const { timing, windupWeight } = PUNCH_CLIP_CONFIG
+function armWeight(time: number, { timing, windupWeight }: ClipTiming): number {
   if (time <= timing.windupEnd) return windupWeight * smooth(time / timing.windupEnd)
   if (time < timing.impactAt) return windupWeight + (1 - windupWeight) * smooth((time - timing.windupEnd) / (timing.impactAt - timing.windupEnd))
   if (time <= timing.strikeEnd) return 1
@@ -144,21 +204,25 @@ function armWeight(time: number): number {
 export function createPunchClipSampler(
   side: AttackSide,
   options: PunchClipOptions = DEFAULT_PUNCH_OPTIONS,
+  kind: AttackKind = 'straight',
 ): PunchClipSampler {
   const normalized = Object.freeze(normalizePunchOptions(options))
   const { durationScale, intensity } = normalized
-  const { timing, hitWindow, torsoWeight } = PUNCH_CLIP_CONFIG
+  const clip = ATTACK_CLIP_CONFIG[kind]
+  const { timing, hitWindow, torsoWeight } = clip
   const duration = timing.duration * durationScale
   const window = Object.freeze({ start: hitWindow.start * durationScale, end: hitWindow.end * durationScale })
   const shoulderName = `${side}Shoulder` as const
   const elbowName = `${side}Elbow` as const
   const wristName = `${side}Wrist` as const
   const joints: readonly RigJointName[] = ['torso', shoulderName, elbowName, wristName]
-  const windupPose = attackKeyframe(side, intensity, 'windup')
-  const impactPose = attackKeyframe(side, intensity, 'impact')
+  const windupPose = attackKeyframe(kind, side, intensity, 'windup')
+  const impactPose = attackKeyframe(kind, side, intensity, 'impact')
+  const followPose = attackKeyframe(kind, side, intensity, 'follow')
   const guard = joints.map((name) => quaternion(GUARD_POSE[name]))
   const windup = joints.map((name) => quaternion(windupPose[name]))
   const impact = joints.map((name) => quaternion(impactPose[name]))
+  const follow = joints.map((name) => quaternion(followPose[name]))
   const scratch = new Quaternion()
   const pose = createCombatGuardPose() as MutableRigPose
   const weights: Partial<Record<RigJointName, number>> = {
@@ -195,11 +259,11 @@ export function createPunchClipSampler(
       } else if (time < timing.strikeEnd) {
         output.phase = 'strike'
         from = impact
-        to = impact
-        amount = 0
+        to = follow
+        amount = smooth((time - timing.impactAt) / (timing.strikeEnd - timing.impactAt))
       } else {
         output.phase = 'recovery'
-        from = impact
+        from = follow
         to = guard
         amount = smooth((time - timing.strikeEnd) / (timing.duration - timing.strikeEnd))
       }
@@ -211,7 +275,7 @@ export function createPunchClipSampler(
         destination[2] = scratch.z
         destination[3] = scratch.w
       }
-      const weight = armWeight(time)
+      const weight = armWeight(time, clip)
       weights[shoulderName] = weight
       weights[elbowName] = weight
       weights[wristName] = weight
@@ -232,6 +296,7 @@ export function samplePunchClip(
   side: AttackSide,
   timeSeconds: number,
   options: PunchClipOptions = DEFAULT_PUNCH_OPTIONS,
+  kind: AttackKind = 'straight',
 ): CombatClipSample {
-  return createPunchClipSampler(side, options).sample(timeSeconds)
+  return createPunchClipSampler(side, options, kind).sample(timeSeconds)
 }

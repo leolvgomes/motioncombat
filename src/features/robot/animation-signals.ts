@@ -1,3 +1,4 @@
+import { attackOfGesture } from '../../engine/gestures/gesture-engine'
 import type { GestureEvent } from '../../engine/gestures/gesture-engine'
 
 export interface AnimationGestureSignal {
@@ -12,7 +13,7 @@ let current: AnimationGestureSignal | null = null
 
 /** One fresh attack pulse. Never a buffered attack that can fire after a long pause. */
 export function publishAnimationGesture(event: GestureEvent): void {
-  if (event.type !== 'PUNCH_LEFT' && event.type !== 'PUNCH_RIGHT') return
+  if (!attackOfGesture(event.type)) return
   current = { sequence: ++sequence, generation, event }
 }
 

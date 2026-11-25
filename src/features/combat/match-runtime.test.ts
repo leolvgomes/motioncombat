@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useLabStore } from '../../stores/lab-store'
+import { useCareerStore } from '../../stores/career-store'
+import { DEFAULT_PROFILE, useProfileStore } from '../../stores/profile-store'
+import { useReplayStore } from '../../stores/replay-store'
 import { useMatchStore } from '../../stores/match-store'
 import { useRobotStore } from '../../stores/robot-store'
 import type { ProcessedPose } from '../../types/motion'
@@ -44,7 +47,10 @@ beforeEach(() => {
   vi.spyOn(combatMotionRuntime, 'calibrated', 'get').mockReturnValue(true)
   vi.spyOn(combatMotionRuntime, 'motionValid', 'get').mockReturnValue(true)
   publishPose(capturedPose())
-  runtime = new MatchRuntime(() => now)
+  useCareerStore.setState({ records: [], persistent: true })
+  useReplayStore.setState({ replays: [], persistent: true, playback: null })
+  useProfileStore.setState({ ...DEFAULT_PROFILE })
+  runtime = new MatchRuntime(() => now, () => 1_700_000_000_000 + now)
   runtime.step(0)
 })
 
@@ -57,6 +63,91 @@ afterEach(() => {
   useLabStore.setState({ session: { status: 'idle', delegate: null, error: null } })
   useRobotStore.setState({ mode: 'tracking' })
   runtime.reset()
+})
+
+/** Plays a whole match without capture input. */
+function finishMatch(seconds = 170) {
+  for (let elapsed = 0; elapsed < seconds && runtime.snapshot.phase !== 'finished'; elapsed += 1) advance(1, runtime.snapshot.mode === 'webcam')
+  expect(runtime.snapshot.phase).toBe('finished')
+}
+
+describe('career and replay bridge', () => {
+  it('records a finished webcam match once, with the current identity, and saves its replay', () => {
+    useProfileStore.setState({ name: 'trovão', arena: 'harbor' })
+    expect(runtime.start('webcam')).toBe(true)
+    finishMatch()
+    const { records } = useCareerStore.getState()
+    expect(records).toHaveLength(1)
+    expect(records[0]).toMatchObject({ id: runtime.currentMatchId, name: 'TROVÃO', arena: 'harbor', winner: runtime.snapshot.winner })
+    advance(3)
+    expect(useCareerStore.getState().records).toHaveLength(1)
+    const { replays } = useReplayStore.getState()
+    expect(replays).toHaveLength(1)
+    expect(replays[0]!.meta).toMatchObject({ id: runtime.currentMatchId, mode: 'webcam', name: 'TROVÃO', arena: 'harbor' })
+  })
+
+  it('keeps demonstrations out of the career but available as replays', () => {
+    runtime.start('demo')
+    finishMatch()
+    runtime.reset()
+    expect(useCareerStore.getState().records).toEqual([])
+    expect(useReplayStore.getState().replays.map(({ meta }) => meta.mode)).toEqual(['demo'])
+  })
+
+  it('leaves nothing behind for an abandoned match', () => {
+    runtime.start('demo')
+    advance(10, false)
+    runtime.reset()
+    expect(useReplayStore.getState().replays).toEqual([])
+    expect(useCareerStore.getState().records).toEqual([])
+  })
+
+  it('plays a replay without touching the simulation, records or the live result', () => {
+    runtime.start('demo')
+    finishMatch()
+    advance(3, false)
+    const result = structuredClone(runtime.snapshot)
+    const replay = useReplayStore.getState().replays[0]!
+    const epoch = runtime.sceneEpoch
+    expect(runtime.startReplay(replay)).toBe(true)
+    expect(runtime.sceneEpoch).toBeGreaterThan(epoch)
+    expect(runtime.replaying).toBe(true)
+    expect(useReplayStore.getState().playback).toMatchObject({ time: 0, playing: true, speed: 1 })
+    expect(runtime.start('demo')).toBe(false)
+    const received: string[] = []
+    const unsubscribe = runtime.subscribe((event) => received.push(event.type))
+    runtime.setReplaySpeed(2)
+    advance(replay.duration / 2 + 1, false)
+    unsubscribe()
+    expect(received).toEqual(replay.events.map(({ event }) => event.type))
+    expect(useReplayStore.getState().playback).toMatchObject({ playing: false })
+    expect(useReplayStore.getState().replays).toHaveLength(1)
+    expect(useMatchStore.getState().opponentCue).toBeNull()
+    runtime.toggleReplay()
+    expect(useReplayStore.getState().playback).toMatchObject({ playing: true, time: 0 })
+    runtime.seekReplay(5)
+    expect(useReplayStore.getState().playback?.time).toBe(5)
+    runtime.suspend('view')
+    expect(useReplayStore.getState().playback?.playing).toBe(false)
+    runtime.stopReplay()
+    expect(useReplayStore.getState().playback).toBeNull()
+    expect(runtime.snapshot).toEqual(result)
+    expect(runtime.start('demo')).toBe(true)
+  })
+
+  it('never interrupts a running or paused match with a replay', () => {
+    runtime.start('demo')
+    finishMatch()
+    runtime.reset()
+    const replay = useReplayStore.getState().replays[0]!
+    runtime.start('demo')
+    advance(5, false)
+    expect(runtime.startReplay(replay)).toBe(false)
+    runtime.pause()
+    expect(runtime.startReplay(replay)).toBe(false)
+    expect(runtime.replaying).toBe(false)
+    expect(runtime.snapshot.pauseReason).toBe('manual')
+  })
 })
 
 describe('capture and match bridge', () => {

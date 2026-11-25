@@ -15,7 +15,7 @@ function rotations(): CombatRotations {
 function frame(overrides: Partial<FighterFrame> = {}): FighterFrame {
   return {
     position: [0, 0, 0], yaw: 0, rotations: rotations(), action: 'idle',
-    attackSide: null, attackProgress: 0, hitActive: false, hitFlash: 0, blocking: false,
+    attackSide: null, attackKind: null, attackProgress: 0, hitActive: false, hitFlash: 0, blocking: false,
     ...overrides,
   }
 }

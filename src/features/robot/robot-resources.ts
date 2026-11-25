@@ -1,4 +1,6 @@
 import { BoxGeometry, CylinderGeometry, ExtrudeGeometry, MeshStandardMaterial, Shape, SphereGeometry, TorusGeometry } from 'three'
+import type { RobotLook } from '../../types/customization'
+import { armorOption, lightOption } from '../customization/catalog'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 
 export type RobotVariant = 'player' | 'opponent'
@@ -50,6 +52,16 @@ export function createRobotResources(variant: RobotVariant = 'player') {
       for (const material of Object.values(materials)) material.dispose()
     },
   }
+}
+
+/** Recolours existing materials, so changing a look never rebuilds geometry. The opponent keeps its own identity. */
+export function applyRobotLook({ materials }: RobotResources, look: RobotLook): void {
+  const armor = armorOption(look.armor)
+  const light = lightOption(look.light)
+  materials.silver.color.set(armor.plate)
+  materials.slate.color.set(armor.frame)
+  materials.cyan.color.set(light.color)
+  materials.cyan.emissive.set(light.emissive)
 }
 
 export type RobotResources = ReturnType<typeof createRobotResources>

@@ -3,6 +3,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Grid } from '@react-three/drei'
 import { RigController, RIG_JOINTS } from '../../engine/motion/rig-controller'
 import { useLabStore } from '../../stores/lab-store'
+import { useProfileStore } from '../../stores/profile-store'
 import { useRobotStore } from '../../stores/robot-store'
 import { readPose, readPoseAspectRatio } from '../motion-tracking/pose-stream'
 import { RobotModel } from './RobotModel'
@@ -91,7 +92,8 @@ function RigDriver() {
     useRobotStore.getState().setSceneDiagnostics(null, 'idle')
     useAnimationStore.getState().publishSnapshot(null)
   }, [])
-  return <RobotModel rigRef={rig} />
+  const look = useProfileStore((state) => state.look)
+  return <RobotModel rigRef={rig} look={look} />
 }
 
 function ViewController() {

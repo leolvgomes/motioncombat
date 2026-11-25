@@ -12,6 +12,11 @@ describe('recognition to animation signals', () => {
     expect(attack?.event.type).toBe('PUNCH_LEFT')
   })
 
+  it.each(['HOOK_LEFT', 'UPPERCUT_RIGHT'] as const)('also passes %s', (type) => {
+    publishAnimationGesture({ type, timestamp: 100, confidence: 0.9 })
+    expect(readAnimationGesture()?.event.type).toBe(type)
+  })
+
   it('retains only the latest attack and invalidates it on reset', () => {
     publishAnimationGesture({ type: 'PUNCH_LEFT', timestamp: 100, confidence: 0.9 })
     const first = readAnimationGesture()

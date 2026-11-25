@@ -1,3 +1,19 @@
+import type { AttackKind } from '../../types/animation'
+
+interface AttackRules {
+  readonly damage: number
+  readonly blockedDamage: number
+  /** Forward root travel at full extension, in metres. */
+  readonly lunge: number
+}
+
+/** Slower attacks hit harder. Timings live with the animation clips. */
+export const ATTACK_RULES: Readonly<Record<AttackKind, AttackRules>> = Object.freeze({
+  straight: Object.freeze({ damage: 12, blockedDamage: 3, lunge: 0.13 }),
+  hook: Object.freeze({ damage: 15, blockedDamage: 4, lunge: 0.32 }),
+  uppercut: Object.freeze({ damage: 18, blockedDamage: 4, lunge: 0.38 }),
+})
+
 export const COMBAT_RULES = Object.freeze({
   fixedStep: 1 / 60,
   maxFrameTime: 0.25,
@@ -7,8 +23,6 @@ export const COMBAT_RULES = Object.freeze({
   maxRounds: 3,
   winsRequired: 2,
   health: 100,
-  damage: 12,
-  blockedDamage: 3,
   stunSeconds: 0.26,
   returnSeconds: 0.18,
   outcomeSeconds: 0.35,
@@ -18,6 +32,5 @@ export const COMBAT_RULES = Object.freeze({
   preferredDistance: 1.37,
   approachSpeed: 0.65,
   retreatSpeed: 0.45,
-  lungeDistance: 0.13,
   dodgeDistance: 0.52,
 })

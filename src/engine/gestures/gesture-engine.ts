@@ -1,6 +1,8 @@
+import type { AttackKind, AttackSide } from '../../types/animation'
 import type { ArmMotionFeatures, CalibrationProfile, MotionFeatures, MotionVector } from '../../types/combat-motion'
 
-export type GestureType = 'PUNCH_LEFT' | 'PUNCH_RIGHT' | 'GUARD' | 'DODGE_LEFT' | 'DODGE_RIGHT'
+export type AttackGestureType = 'PUNCH_LEFT' | 'PUNCH_RIGHT' | 'HOOK_LEFT' | 'HOOK_RIGHT' | 'UPPERCUT_LEFT' | 'UPPERCUT_RIGHT'
+export type GestureType = AttackGestureType | 'GUARD' | 'DODGE_LEFT' | 'DODGE_RIGHT'
 export type GesturePosture = 'neutral' | 'guard' | 'dodge-left' | 'dodge-right'
 
 export interface GestureEvent {
@@ -20,6 +22,32 @@ export interface GestureContext {
   readonly enabled: boolean
   readonly calibrating: boolean
   readonly profile: CalibrationProfile | null
+  /** Hooks and uppercuts are optional; straight punches never depend on them. */
+  readonly advancedAttacks?: boolean
+}
+
+export interface AttackRequest {
+  readonly kind: AttackKind
+  /** The player's anatomical side, before display mirroring. */
+  readonly side: AttackSide
+}
+
+const ATTACK_GESTURES: Readonly<Record<AttackGestureType, AttackRequest>> = {
+  PUNCH_LEFT: { kind: 'straight', side: 'left' }, PUNCH_RIGHT: { kind: 'straight', side: 'right' },
+  HOOK_LEFT: { kind: 'hook', side: 'left' }, HOOK_RIGHT: { kind: 'hook', side: 'right' },
+  UPPERCUT_LEFT: { kind: 'uppercut', side: 'left' }, UPPERCUT_RIGHT: { kind: 'uppercut', side: 'right' },
+}
+
+/** The attack a gesture asks for, or null for posture gestures. */
+export function attackOfGesture(type: GestureType): AttackRequest | null {
+  return Object.hasOwn(ATTACK_GESTURES, type) ? ATTACK_GESTURES[type as AttackGestureType] : null
+}
+
+/** One wrist position. Outward grows away from the body's midline on that arm's side. */
+interface SwingSample {
+  readonly timestamp: number
+  readonly outward: number
+  readonly y: number
 }
 
 interface ArmHistory {
@@ -31,6 +59,8 @@ interface ArmHistory {
   /** Highest reach since the last punch; Infinity when no punch is pending release. */
   peakReach: number
   cooldownUntil: number
+  /** Recent wrist path, at most SWING_WINDOW_MS long. */
+  swing: SwingSample[]
 }
 
 const MIN_CONFIDENCE = 0.6
@@ -44,6 +74,22 @@ const MIN_REACH_GAIN = 0.2
 const RELEASE_DROP = 0.12
 const PUNCH_LOWEST_WRIST = -0.6
 const PUNCH_HIGHEST_WRIST = 1.2
+const SWING_WINDOW_MS = 380
+// A fighting stance keeps the other fist up; a hanging arm means an everyday gesture.
+const SWING_SUPPORT_LOWEST_WRIST = -0.7
+const SWING_SUPPORT_TRAVEL = 0.35
+const SWING_SPEED = 1.2
+const SWING_MAX_ELBOW_ANGLE = 2.5
+const HOOK_ORIGIN = 0.6
+const HOOK_END = 0.15
+const HOOK_TRAVEL = 0.5
+const HOOK_LOWEST_ORIGIN = -0.6
+const HOOK_LOWEST_WRIST = -0.45
+const HOOK_HIGHEST_WRIST = 0.8
+const UPPERCUT_ORIGIN = -0.3
+const UPPERCUT_END = 0.15
+const UPPERCUT_RISE = 0.6
+const UPPERCUT_WRIST_ABOVE_ELBOW = 0.2
 const GUARD_DWELL_MS = 150
 const DODGE_DWELL_MS = 100
 const RELEASE_DWELL_MS = 90
@@ -52,7 +98,7 @@ const DODGE_ENTER_RADIANS = 0.18
 const DODGE_EXIT_RADIANS = 0.11
 
 function armHistory(): ArmHistory {
-  return { armed: false, originReach: 0, originTime: 0, peakReach: Infinity, cooldownUntil: 0 }
+  return { armed: false, originReach: 0, originTime: 0, peakReach: Infinity, cooldownUntil: 0, swing: [] }
 }
 
 function finiteVector(vector: MotionVector): boolean {
@@ -93,6 +139,7 @@ function clearArm(history: ArmHistory): void {
   history.originReach = 0
   history.originTime = 0
   history.peakReach = Infinity
+  history.swing.length = 0
 }
 
 /**
@@ -147,7 +194,8 @@ export class GestureEngine {
     const right = usableArm(features.rightArm)
     const leftPunch = this.punch(this.left, left, features, 'PUNCH_LEFT')
     const rightPunch = this.punch(this.right, right, features, 'PUNCH_RIGHT')
-    const punch = leftPunch ?? rightPunch
+    const swing = context.advancedAttacks ? this.swings(left, right, features, leftPunch !== null || rightPunch !== null) : null
+    const punch = leftPunch ?? rightPunch ?? swing
     const postureEvent = this.updatePosture(features, left, right, context.profile, punch === null)
     return this.snapshot(punch ?? postureEvent)
   }
@@ -210,6 +258,77 @@ export class GestureEngine {
     if (timestamp < history.cooldownUntil) return null
     history.cooldownUntil = timestamp + PUNCH_COOLDOWN_MS
     return { type, timestamp, confidence: Math.min(features.confidence, arm.confidence) }
+  }
+
+  /** Curved attacks from the wrist path. The opposite arm must hold still, so raising or crossing both arms never counts. */
+  private swings(left: ArmMotionFeatures | null, right: ArmMotionFeatures | null, features: MotionFeatures, punched: boolean): GestureEvent | null {
+    this.recordSwing(this.left, left, 1, features.timestamp)
+    this.recordSwing(this.right, right, -1, features.timestamp)
+    if (punched) {
+      this.left.swing.length = 0
+      this.right.swing.length = 0
+      return null
+    }
+    if (!left || !right) return null
+    return this.swing('left', this.left, left, 1, this.right, right, features)
+      ?? this.swing('right', this.right, right, -1, this.left, left, features)
+  }
+
+  private recordSwing(history: ArmHistory, arm: ArmMotionFeatures | null, side: 1 | -1, timestamp: number): void {
+    if (!arm) { history.swing.length = 0; return }
+    while (history.swing.length > 0 && timestamp - history.swing[0]!.timestamp > SWING_WINDOW_MS) history.swing.shift()
+    history.swing.push({ timestamp, outward: arm.wrist.x * side, y: arm.wrist.y })
+  }
+
+  private swing(
+    side: AttackSide,
+    history: ArmHistory,
+    arm: ArmMotionFeatures,
+    sign: 1 | -1,
+    supportHistory: ArmHistory,
+    support: ArmMotionFeatures,
+    features: MotionFeatures,
+  ): GestureEvent | null {
+    const samples = history.swing
+    const now = samples[samples.length - 1]
+    if (!now || samples.length < 2 || features.timestamp < history.cooldownUntil
+      || arm.reachAngle > SWING_MAX_ELBOW_ANGLE || support.wrist.y < SWING_SUPPORT_LOWEST_WRIST) return null
+    let widest = now
+    let lowest = now
+    for (const sample of samples) {
+      if (sample.outward > widest.outward) widest = sample
+      if (sample.y < lowest.y) lowest = sample
+    }
+    let supportTravel = 0
+    const supportNow = supportHistory.swing[supportHistory.swing.length - 1]
+    if (supportNow) for (const sample of supportHistory.swing) {
+      supportTravel = Math.max(supportTravel, Math.hypot(supportNow.outward - sample.outward, supportNow.y - sample.y))
+    }
+    if (supportTravel > SWING_SUPPORT_TRAVEL) return null
+
+    const travel = widest.outward - now.outward
+    const rise = now.y - lowest.y
+    const hook = widest.outward >= HOOK_ORIGIN && now.outward <= HOOK_END && travel >= HOOK_TRAVEL
+      && widest.y >= HOOK_LOWEST_ORIGIN && now.y >= HOOK_LOWEST_WRIST && now.y <= HOOK_HIGHEST_WRIST
+      && Math.abs(now.y - widest.y) <= travel * 0.7 && -arm.velocity.x * sign >= SWING_SPEED
+    const uppercut = lowest.y <= UPPERCUT_ORIGIN && now.y >= UPPERCUT_END && rise >= UPPERCUT_RISE
+      && now.outward >= -0.45 && now.outward <= 0.65 && Math.abs(now.outward - lowest.outward) <= rise * 0.7
+      && arm.wristAboveElbow >= UPPERCUT_WRIST_ABOVE_ELBOW && arm.velocity.y >= SWING_SPEED
+    if (!hook && !uppercut) return null
+
+    // The same motion must not continue into a straight punch or another swing.
+    samples.length = 0
+    history.cooldownUntil = features.timestamp + PUNCH_COOLDOWN_MS
+    if (history.armed) {
+      history.originReach = arm.reach
+      history.originTime = features.timestamp
+    }
+    const suffix = side === 'left' ? 'LEFT' : 'RIGHT'
+    return {
+      type: hook ? `HOOK_${suffix}` : `UPPERCUT_${suffix}`,
+      timestamp: features.timestamp,
+      confidence: Math.min(features.confidence, arm.confidence, support.confidence),
+    }
   }
 
   private updatePosture(

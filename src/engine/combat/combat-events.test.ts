@@ -103,7 +103,7 @@ describe('combat presentation events', () => {
     match.input.now += 1
     match.input.pulse = { sequence: 1, generation: 1, event: { type: 'PUNCH_LEFT', timestamp: match.input.now, confidence: 0.9 } }
     match.engine.step(match.input, 0)
-    expect(match.engine.drainEvents()).toEqual([{ type: 'attack', fighter: 'player', side: 'right' }])
+    expect(match.engine.drainEvents()).toEqual([{ type: 'attack', fighter: 'player', side: 'right', kind: 'straight' }])
   })
 
   it('keeps an undrained queue bounded and clears it on reset', () => {

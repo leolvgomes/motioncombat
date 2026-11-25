@@ -1,6 +1,6 @@
 import type { CombatEvent, FighterId, MatchMode } from '../../types/combat'
 
-export type SoundCue = 'countdown' | 'fight' | 'swing' | 'hit' | 'knockout' | 'block' | 'dodge' | 'telegraph'
+export type SoundCue = 'countdown' | 'fight' | 'swing' | 'hit' | 'knockout' | 'block' | 'dodge' | 'telegraph' | 'combo'
   | 'round-end' | 'victory' | 'defeat' | 'draw'
 
 /** Which sound, if any, a simulation event deserves. Pure, so the mapping is testable without audio. */
@@ -18,6 +18,7 @@ export function cueForEvent(event: CombatEvent, mode: MatchMode): SoundCue | nul
       if (event.defenderHealth <= 0) return 'knockout'
       return result === 'blocked' ? 'block' : 'hit'
     }
+    case 'combo': return 'combo'
     case 'round-end': return 'round-end'
     case 'match-end':
       if (event.winner === 'draw') return 'draw'
@@ -29,6 +30,7 @@ export function cueForEvent(event: CombatEvent, mode: MatchMode): SoundCue | nul
 export function cueFighter(event: CombatEvent): FighterId | null {
   if (event.type === 'attack' || event.type === 'telegraph') return event.fighter
   if (event.type === 'impact') return event.impact.attacker
+  if (event.type === 'combo') return event.combo.fighter
   return null
 }
 
@@ -169,6 +171,13 @@ export class CombatAudio {
       case 'telegraph':
         this.tone({ type: 'triangle', from: 1040, start: now, duration: 0.06, gain: 0.12 })
         return this.tone({ type: 'triangle', from: 1040, start: now + 0.09, duration: 0.06, gain: 0.12 })
+      case 'combo': {
+        let end = now
+        ;[659.25, 880, 1174.66].forEach((frequency, index) => {
+          end = this.tone({ type: 'triangle', from: frequency * pitch, start: now + 0.05 + index * 0.06, duration: 0.16, gain: 0.14 })
+        })
+        return end
+      }
       case 'round-end': {
         let end = now
         for (const offset of [0, 0.24, 0.48]) {

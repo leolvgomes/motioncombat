@@ -7,6 +7,7 @@ import type { MotionFeatures } from '../../types/combat-motion'
 import { emptyCombatMotionSnapshot, useCombatMotionStore } from '../../stores/combat-motion-store'
 import type { CombatMotionSnapshot } from '../../stores/combat-motion-store'
 import { useLabStore } from '../../stores/lab-store'
+import { useProfileStore } from '../../stores/profile-store'
 import { useRobotStore } from '../../stores/robot-store'
 import { publishAnimationGesture, readAnimationGesture, resetAnimationSignals } from '../robot/animation-signals'
 
@@ -63,7 +64,8 @@ class CombatMotionRuntime {
     // Invalidate an unconsumed pulse even if a brief global loss happens between
     // display frames. Reacquisition must not replay the pre-loss attack.
     if (!this.features.valid && readAnimationGesture()) resetAnimationSignals()
-    const recognized = this.gestures.update(this.features, { enabled: true, calibrating: false, profile: calibration.profile })
+    const recognized = this.gestures.update(this.features, { enabled: true, calibrating: false, profile: calibration.profile,
+      advancedAttacks: useProfileStore.getState().advancedAttacks })
     this.posture = recognized.posture
     if (recognized.event) {
       publishAnimationGesture(recognized.event)

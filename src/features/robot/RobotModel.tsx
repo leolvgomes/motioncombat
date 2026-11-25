@@ -1,7 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import type { RefObject } from 'react'
 import type { BufferGeometry, Group, Material } from 'three'
-import { createRobotResources } from './robot-resources'
+import type { HeadId, RobotLook, ShoulderId } from '../../types/customization'
+import { DEFAULT_LOOK } from '../customization/catalog'
+import { applyRobotLook, createRobotResources } from './robot-resources'
 import type { RobotResources, RobotVariant } from './robot-resources'
 
 /** Local rest axes point down -Y; +Z is forward and anatomical left is +X. */
@@ -37,21 +39,55 @@ function Part(props: PartProps) {
   return <mesh {...props} castShadow receiveShadow />
 }
 
+/** Cosmetic plates only: joints, reach and hitboxes are shared by every style. */
+function ShoulderPlates({ side, style, resources: { geometries: g, materials: m } }: { side: 1 | -1; style: ShoulderId; resources: RobotResources }) {
+  if (style === 'light') return <>
+    <Part geometry={g.armor} material={m.slate} position={[side * 0.03, 0, 0]} rotation={[0, 0, side * 0.1]} scale={[0.26, 0.21, 0.27]} />
+    <Part geometry={g.box} material={m.cyan} position={[side * 0.03, 0.04, 0.138]} scale={[0.13, 0.014, 0.008]} />
+  </>
+  if (style === 'heavy') return <>
+    <Part geometry={g.armor} material={m.slate} position={[side * 0.045, -0.03, 0]} rotation={[0, 0, side * 0.1]} scale={[0.39, 0.31, 0.39]} />
+    <Part geometry={g.armor} material={m.silver} position={[side * 0.07, 0.125, 0]} rotation={[0, 0, side * 0.22]} scale={[0.38, 0.1, 0.4]} />
+    <Part geometry={g.armor} material={m.silver} position={[side * 0.16, -0.03, 0]} rotation={[0, 0, side * 0.12]} scale={[0.1, 0.26, 0.34]} />
+    <Part geometry={g.box} material={m.cyan} position={[side * 0.045, 0.055, 0.199]} scale={[0.22, 0.02, 0.008]} />
+  </>
+  return <>
+    <Part geometry={g.armor} material={m.slate} position={[side * 0.035, -0.035, 0]} rotation={[0, 0, side * 0.1]} scale={[0.35, 0.29, 0.35]} />
+    <Part geometry={g.armor} material={m.silver} position={[side * 0.035, 0.035, 0.125]} rotation={[0.11, 0, side * 0.1]} scale={[0.31, 0.13, 0.14]} />
+    <Part geometry={g.box} material={m.cyan} position={[side * 0.035, 0.078, 0.201]} scale={[0.18, 0.016, 0.008]} />
+  </>
+}
+
+function HeadPlates({ style, resources: { geometries: g, materials: m } }: { style: HeadId; resources: RobotResources }) {
+  return <>
+    {style === 'twin' ? <>
+      <Part geometry={g.cylinder} material={m.cyan} position={[0.082, 0.129, 0.176]} rotation={[Math.PI / 2, 0, 0]} scale={[0.04, 0.02, 0.04]} />
+      <Part geometry={g.cylinder} material={m.cyan} position={[-0.082, 0.129, 0.176]} rotation={[Math.PI / 2, 0, 0]} scale={[0.04, 0.02, 0.04]} />
+      <Part geometry={g.ring} material={m.steel} position={[0.082, 0.129, 0.182]} scale={[0.05, 0.05, 0.05]} />
+      <Part geometry={g.ring} material={m.steel} position={[-0.082, 0.129, 0.182]} scale={[0.05, 0.05, 0.05]} />
+    </> : <Part geometry={g.armor} material={m.cyan} position={[0, 0.129, 0.183]} scale={[0.286, 0.036, 0.016]} />}
+    {style === 'crest' && <>
+      <Part geometry={g.armor} material={m.silver} position={[0, 0.34, -0.01]} rotation={[-0.18, 0, 0]} scale={[0.075, 0.15, 0.3]} />
+      <Part geometry={g.box} material={m.cyan} position={[0, 0.345, 0.146]} rotation={[-0.18, 0, 0]} scale={[0.022, 0.1, 0.008]} />
+    </>}
+  </>
+}
+
 interface ArmProps {
   side: 1 | -1
+  style: ShoulderId
   resources: RobotResources
   shoulderRef: GroupRef
   elbowRef: GroupRef
   wristRef: GroupRef
 }
 
-function Arm({ side, resources: { geometries: g, materials: m }, shoulderRef, elbowRef, wristRef }: ArmProps) {
+function Arm({ side, style, resources, shoulderRef, elbowRef, wristRef }: ArmProps) {
+  const { geometries: g, materials: m } = resources
   const name = side === 1 ? 'left' : 'right'
   return <group ref={shoulderRef} name={`${name}-shoulder`} position={[side * 0.53, 0.63, 0]}>
     <Part geometry={g.cylinder} material={m.mechanism} rotation={[0, 0, Math.PI / 2]} scale={[0.13, 0.25, 0.13]} />
-    <Part geometry={g.armor} material={m.slate} position={[side * 0.035, -0.035, 0]} rotation={[0, 0, side * 0.1]} scale={[0.35, 0.29, 0.35]} />
-    <Part geometry={g.armor} material={m.silver} position={[side * 0.035, 0.035, 0.125]} rotation={[0.11, 0, side * 0.1]} scale={[0.31, 0.13, 0.14]} />
-    <Part geometry={g.box} material={m.cyan} position={[side * 0.035, 0.078, 0.201]} scale={[0.18, 0.016, 0.008]} />
+    <ShoulderPlates side={side} style={style} resources={resources} />
     <Part geometry={g.cylinder} material={m.mechanism} position={[0, -0.245, 0]} scale={[0.075, 0.41, 0.075]} />
     <Part geometry={g.armor} material={m.silver} position={[side * 0.012, -0.255, 0.012]} rotation={[0, 0, -side * 0.05]} scale={[0.225, 0.31, 0.255]} />
     <Part geometry={g.cylinder} material={m.steel} position={[-side * 0.081, -0.27, -0.057]} scale={[0.022, 0.3, 0.022]} />
@@ -103,8 +139,10 @@ function Leg({ side, resources: { geometries: g, materials: m }, hipRef, kneeRef
 }
 
 /** A replaceable, original procedural rig. Root at floor 0; torso pivot at y=1.20. */
-export function RobotModel({ rigRef, variant = 'player' }: { rigRef: RefObject<RobotRig | null>; variant?: RobotVariant }) {
+export function RobotModel({ rigRef, variant = 'player', look = DEFAULT_LOOK }: { rigRef: RefObject<RobotRig | null>; variant?: RobotVariant; look?: RobotLook }) {
   const resources = useMemo(() => createRobotResources(variant), [variant])
+  useLayoutEffect(() => { if (variant === 'player') applyRobotLook(resources, look) }, [resources, variant, look])
+  const style = variant === 'player' ? look : DEFAULT_LOOK
   const { geometries: g, materials: m } = resources
   const pendingDisposals = useRef(new Map<RobotResources, ReturnType<typeof setTimeout>>())
   const root = useRef<Group>(null)
@@ -183,13 +221,13 @@ export function RobotModel({ rigRef, variant = 'player' }: { rigRef: RefObject<R
         <Part geometry={g.armor} material={m.slate} position={[0, 0.1, 0]} scale={[0.38, 0.34, 0.3]} />
         <Part geometry={g.armor} material={m.silver} position={[0, 0.265, 0.005]} rotation={[-0.06, 0, 0]} scale={[0.39, 0.09, 0.31]} />
         <Part geometry={g.armor} material={m.mechanism} position={[0, 0.125, 0.157]} scale={[0.335, 0.096, 0.045]} />
-        <Part geometry={g.armor} material={m.cyan} position={[0, 0.129, 0.183]} scale={[0.286, 0.036, 0.016]} />
+        <HeadPlates style={style.head} resources={resources} />
         <Part geometry={g.armor} material={m.silver} position={[0, -0.008, 0.112]} rotation={[-0.12, 0, 0]} scale={[0.283, 0.12, 0.14]} />
         <Part geometry={g.cylinder} material={m.steel} position={[0.207, 0.095, 0]} rotation={[0, 0, Math.PI / 2]} scale={[0.075, 0.055, 0.075]} />
         <Part geometry={g.cylinder} material={m.steel} position={[-0.207, 0.095, 0]} rotation={[0, 0, Math.PI / 2]} scale={[0.075, 0.055, 0.075]} />
       </group>
-      <Arm side={1} resources={resources} shoulderRef={leftShoulder} elbowRef={leftElbow} wristRef={leftWrist} />
-      <Arm side={-1} resources={resources} shoulderRef={rightShoulder} elbowRef={rightElbow} wristRef={rightWrist} />
+      <Arm side={1} style={style.shoulders} resources={resources} shoulderRef={leftShoulder} elbowRef={leftElbow} wristRef={leftWrist} />
+      <Arm side={-1} style={style.shoulders} resources={resources} shoulderRef={rightShoulder} elbowRef={rightElbow} wristRef={rightWrist} />
     </group>
   </group>
 }

@@ -1,6 +1,7 @@
 import { Quaternion } from 'three'
-import type { AnimationState, AttackPhase, AttackSide, PunchClipSampler } from '../../types/animation'
+import type { AnimationState, AttackKind, AttackPhase, AttackSide, PunchClipSampler } from '../../types/animation'
 import type { RigJointName } from '../../types/robot'
+import { attackOfGesture } from '../gestures/gesture-engine'
 import type { GestureEvent } from '../gestures/gesture-engine'
 import { RIG_JOINTS } from '../motion/rig-controller'
 import { createPunchClipSampler } from './combat-clips'
@@ -25,6 +26,7 @@ export interface HybridInput {
 export interface HybridAnimationSnapshot {
   readonly state: AnimationState
   readonly attackSide: AttackSide | null
+  readonly attackKind: AttackKind | null
   readonly phase: AttackPhase | null
   readonly progress: number
   readonly hitActive: boolean
@@ -38,12 +40,14 @@ type MutableSnapshot = { -readonly [Key in keyof HybridAnimationSnapshot]: Hybri
 type Rotations = Record<RigJointName, Quaternion>
 interface Attack {
   readonly side: AttackSide
+  readonly kind: AttackKind
   readonly source: 'gesture' | 'demo'
   readonly sampler: PunchClipSampler
   elapsed: number
 }
 interface Returning {
   readonly side: AttackSide
+  readonly kind: AttackKind
   readonly source: 'gesture' | 'demo'
   elapsed: number
 }
@@ -52,6 +56,8 @@ const RETURN_DURATION = 0.18
 const MAX_GESTURE_AGE_MS = 250
 const FIRST_DEMO_ATTACK_SECONDS = 1
 const DEMO_INTERVAL_SECONDS = 1.8
+const DEMO_SEQUENCE: readonly { readonly kind: AttackKind; readonly side: AttackSide }[] =
+  (['straight', 'hook', 'uppercut'] as const).flatMap((kind) => (['left', 'right'] as const).map((side) => ({ kind, side })))
 
 function rotations(): Rotations {
   return Object.fromEntries(RIG_JOINTS.map((name) => [name, new Quaternion()])) as Rotations
@@ -68,7 +74,7 @@ export class HybridAnimationController {
   private readonly savedClip = rotations()
   private readonly weights = Object.fromEntries(RIG_JOINTS.map((name) => [name, 0])) as Record<RigJointName, number>
   private readonly status: MutableSnapshot = {
-    state: 'IDLE', attackSide: null, phase: null, progress: 0, hitActive: false,
+    state: 'IDLE', attackSide: null, attackKind: null, phase: null, progress: 0, hitActive: false,
     blendWeight: 0, source: null, acceptedAttacks: 0, ignoredGestures: 0,
   }
   private readonly createdAt: number
@@ -83,7 +89,7 @@ export class HybridAnimationController {
   private initialized = false
   private demoTime = 0
   private nextDemoAt = FIRST_DEMO_ATTACK_SECONDS
-  private demoSide: AttackSide = 'left'
+  private demoIndex = 0
 
   constructor(createdAt = performance.now()) {
     this.createdAt = Number.isFinite(createdAt) ? Math.max(0, createdAt) : 0
@@ -130,8 +136,9 @@ export class HybridAnimationController {
       if (this.demoTime + 1e-9 >= this.nextDemoAt) {
         this.nextDemoAt = this.demoTime + DEMO_INTERVAL_SECONDS
         if (!this.attack && !this.returning) {
-          this.startAttack(this.demoSide, 'demo', input)
-          this.demoSide = this.demoSide === 'left' ? 'right' : 'left'
+          const { kind, side } = DEMO_SEQUENCE[this.demoIndex % DEMO_SEQUENCE.length]!
+          this.startAttack(kind, side, 'demo', input)
+          this.demoIndex += 1
           demoStarted = true
         }
       }
@@ -154,8 +161,10 @@ export class HybridAnimationController {
         if (weight > 0) this.rotations[name].slerp(this.savedClip[name], weight)
         maximumWeight = Math.max(maximumWeight, weight)
       }
-      this.status.state = this.attack.side === 'left' ? 'PUNCH_LEFT' : 'PUNCH_RIGHT'
+      this.status.state = this.attack.kind === 'hook' ? 'HOOK' : this.attack.kind === 'uppercut' ? 'UPPERCUT'
+        : this.attack.side === 'left' ? 'PUNCH_LEFT' : 'PUNCH_RIGHT'
       this.status.attackSide = this.attack.side
+      this.status.attackKind = this.attack.kind
       this.status.phase = sample.phase
       this.status.progress = sample.progress
       this.status.hitActive = sample.hitActive
@@ -180,6 +189,7 @@ export class HybridAnimationController {
       } else {
         this.status.state = 'RETURNING'
         this.status.attackSide = this.returning.side
+        this.status.attackKind = this.returning.kind
         this.status.phase = null
         this.status.progress = progress
         this.status.hitActive = false
@@ -202,8 +212,8 @@ export class HybridAnimationController {
       || pulse.sequence < 0 || pulse.sequence <= this.consumedSequence) return false
     // Consume before any gate: disabling, being busy or changing epochs never queues an attack.
     this.consumedSequence = pulse.sequence
-    const type = pulse.event.type
-    if (type !== 'PUNCH_LEFT' && type !== 'PUNCH_RIGHT') return false
+    const requested = attackOfGesture(pulse.event.type)
+    if (!requested) return false
     const age = input.now - pulse.event.timestamp
     if (!input.enabled || !this.live(input) || this.attack || this.returning
       || !Number.isFinite(input.now) || !Number.isFinite(age) || age < 0 || age > MAX_GESTURE_AGE_MS
@@ -212,15 +222,15 @@ export class HybridAnimationController {
       this.status.ignoredGestures += 1
       return false
     }
-    const humanLeft = type === 'PUNCH_LEFT'
+    const humanLeft = requested.side === 'left'
     const modelLeft = input.mirrored ? !humanLeft : humanLeft
-    this.startAttack(modelLeft ? 'left' : 'right', 'gesture', input)
+    this.startAttack(requested.kind, modelLeft ? 'left' : 'right', 'gesture', input)
     return true
   }
 
-  private startAttack(side: AttackSide, source: Attack['source'], input: HybridInput): void {
-    const sampler = createPunchClipSampler(side, { durationScale: input.durationScale, intensity: input.intensity })
-    this.attack = { side, source, sampler, elapsed: 0 }
+  private startAttack(kind: AttackKind, side: AttackSide, source: Attack['source'], input: HybridInput): void {
+    const sampler = createPunchClipSampler(side, { durationScale: input.durationScale, intensity: input.intensity }, kind)
+    this.attack = { side, kind, source, sampler, elapsed: 0 }
     this.clearWeights()
     this.status.acceptedAttacks += 1
   }
@@ -231,7 +241,7 @@ export class HybridAnimationController {
     this.attack = null
     this.status.hitActive = false
     if (RIG_JOINTS.some((name) => this.weights[name] > 0.00001)) {
-      this.returning = { side: attack.side, source: attack.source, elapsed: 0 }
+      this.returning = { side: attack.side, kind: attack.kind, source: attack.source, elapsed: 0 }
       this.status.state = 'RETURNING'
       this.status.phase = null
       this.status.progress = 0
@@ -250,7 +260,7 @@ export class HybridAnimationController {
   private resetDemoClock(): void {
     this.demoTime = 0
     this.nextDemoAt = FIRST_DEMO_ATTACK_SECONDS
-    this.demoSide = 'left'
+    this.demoIndex = 0
   }
 
   private setBaseState(input: HybridInput): void {
@@ -259,6 +269,7 @@ export class HybridAnimationController {
     this.status.state = !tracking ? 'IDLE' : input.posture === 'guard' ? 'GUARD'
       : input.posture === 'neutral' ? 'TRACKING' : 'DODGE'
     this.status.attackSide = null
+    this.status.attackKind = null
     this.status.phase = null
     this.status.progress = 0
     this.status.hitActive = false

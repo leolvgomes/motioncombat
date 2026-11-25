@@ -1,6 +1,6 @@
 # STEEL SYNC — Motion Combat
 
-Jogo web de combate robótico controlado pelo corpo. As **fases 1 a 5** implementam webcam, rastreamento corporal, robôs 3D procedurais, calibração, gestos, animações híbridas e uma partida local contra IA, com arena, hitboxes, vida, defesa, rounds e resultado. A **fase 6** acrescenta polimento: faíscas e anéis de impacto, tremor de câmera, som procedural, narração para leitores de tela, atalhos de teclado e sugestão de qualidade por FPS. O laboratório de movimento continua disponível; uma demonstração IA × IA permite observar o combate sem câmera.
+Jogo web de combate robótico controlado pelo corpo. As **fases 1 a 5** implementam webcam, rastreamento corporal, robôs 3D procedurais, calibração, gestos, animações híbridas e uma partida local contra IA, com arena, hitboxes, vida, defesa, rounds e resultado. A **fase 6** acrescenta polimento: faíscas e anéis de impacto, tremor de câmera, som procedural, narração para leitores de tela, atalhos de teclado e sugestão de qualidade por FPS. A **fase 7** acrescenta ganchos, uppercuts e combos, personalização do robô, três cenários, carreira com ranking local e replays de movimento. O laboratório de movimento continua disponível; uma demonstração IA × IA permite observar o combate sem câmera.
 
 ## Stack
 
@@ -17,7 +17,7 @@ Jogo web de combate robótico controlado pelo corpo. As **fases 1 a 5** implemen
 | Web Audio API | Sons de combate sintetizados no navegador, sem arquivos de áudio |
 | Vitest 5 | Câmera, rig, gestos, animações, geometria de contato, regras, efeitos, áudio e integração |
 
-Não há motor de física, backend, upload, gravação de vídeo, analytics ou persistência de landmarks. O combate usa passos fixos e volumes geométricos simples; não necessita de Rapier. A única persistência é a preferência de som/efeitos no `localStorage` do navegador.
+Não há motor de física, backend, upload, gravação de vídeo, analytics ou persistência de landmarks. O combate usa passos fixos e volumes geométricos simples; não necessita de Rapier. O `localStorage` do navegador guarda preferências, perfil do robô, histórico de partidas e até três replays com as rotações dos robôs. Nada é enviado.
 
 ## Requisitos
 
@@ -56,8 +56,8 @@ Execute `setup:tracking` **antes do build** para incluir o modelo e WASM em `dis
 
 1. A aplicação abre na visão **Arena**, com câmera desligada. Para conhecer a partida sem webcam, escolha **Assistir demonstração**: os dois robôs são controlados pela IA, com fonte programada explicitamente identificada. Esse modo troca a fonte de movimento e interrompe a câmera.
 2. Para jogar, clique **Iniciar câmera** no painel de captura e conclua a calibração de postura neutra/guarda no painel **Do movimento ao gesto**. O botão de combate fica disponível somente com câmera, calibração e pose atual válidas.
-3. Inicie o combate e aguarde a contagem. Assuma a guarda, faça socos retos e retorne à guarda entre os golpes. Não há tecla ou botão para atacar. Guarda reduz o dano; inclinar o tronco desloca o robô para esquivar. A aproximação do adversário é automática.
-4. Acompanhe vida, tempo e placar no HUD. O adversário sinaliza a preparação antes de socar. Um soco precisa alcançar os volumes do corpo/cabeça durante a janela ativa; ataques fora de alcance não descontam vida.
+3. Inicie o combate e aguarde a contagem. Assuma a guarda, faça socos retos, ganchos ou uppercuts e retorne à guarda entre os golpes. Não há tecla ou botão para atacar. Guarda reduz o dano; inclinar o tronco desloca o robô para esquivar. A aproximação do adversário é automática.
+4. Acompanhe vida, tempo e placar no HUD. O adversário sinaliza o tipo e o lado do golpe antes de atacar. Um soco precisa alcançar os volumes do corpo/cabeça durante a janela ativa; ataques fora de alcance não descontam vida.
 5. A partida tem até três rounds de 45 segundos. Duas vitórias encerram antes do terceiro; nocaute encerra o round, e o tempo compara a vida restante. Empates são possíveis. A vida é restaurada no início de cada round; estatísticas acumulam na partida.
 6. **Pausar**, sair do enquadramento, recalibrar, trocar o espelho, ocultar a página ou abrir o laboratório interrompe a partida. Ela requer **Retomar** após recuperar uma fonte válida; nenhum ataque antigo fica enfileirado. A página oculta também desliga a câmera, exigindo novo início e calibração.
 7. Após o resultado, inicie outra partida ou volte à preparação. A demonstração utiliza as mesmas regras de contato, dano e rounds, com dois controladores programados.
@@ -65,7 +65,12 @@ Execute `setup:tracking` **antes do build** para incluir o modelo e WASM em `dis
 9. Atalhos de teclado na arena: **P** pausa ou retoma; **M** liga ou desliga o som. Eles não funcionam enquanto o foco estiver em um campo, seletor ou controle deslizante, e não existe atalho de ataque.
 10. Se a arena ficar abaixo de 42 FPS por alguns segundos na qualidade Equilibrada, aparece uma sugestão para usar a qualidade Leve. A troca nunca é automática.
 
-A arena e o laboratório alternam a cena 3D; somente um canvas 3D fica montado. Captura e calibração continuam montadas ao trocar de visão. Os ajustes de duração/amplitude do laboratório não alteram as regras balanceadas da partida.
+11. Conecte golpes na ordem certa, com até 1,5 s entre eles, para completar combos com dano extra. A lista está em **Carreira**. Bloqueio, esquiva, erro, pausa ou levar um golpe quebram a sequência.
+12. Em **Garagem**, escolha nome, blindagem, luzes, cabeça, ombreiras e cenário. São mudanças visuais: alcance, dano e áreas de contato não mudam. O cenário também pode ser trocado abaixo da arena.
+13. Ao fim de uma partida, use **Ver replay** ou abra **Carreira**. O replay tem pausa (**P**), linha do tempo e velocidades de 0,25× a 2×. Uma partida em andamento ou pausada nunca é interrompida por um replay.
+14. **Carreira** mostra estatísticas, ranking das 10 melhores partidas e replays. Somente partidas com webcam entram nas estatísticas; as demonstrações geram apenas replays.
+
+A arena, o laboratório e a garagem alternam a cena 3D; somente um canvas 3D fica montado. Captura e calibração continuam montadas ao trocar de visão. Os ajustes de duração/amplitude do laboratório não alteram as regras balanceadas da partida.
 
 ## Laboratório e revisão do tracking
 
@@ -77,13 +82,13 @@ A arena e o laboratório alternam a cena 3D; somente um canvas 3D fica montado. 
 6. Mova braços e tronco devagar. Compare vídeo, pontos e articulações do robô. Na vista **Perspectiva**, teste uma extensão à frente para observar a profundidade. Antes da calibração, o robô usa apenas espelhamento.
 7. Teste **Exibir esqueleto**, **Espelhar vídeo**, **Guia de enquadramento** e tela cheia (quando suportada). Vídeo, overlay e mapeamento do robô respeitam o mesmo modo de espelhamento. Com espelhamento ligado, o braço à esquerda da imagem move o braço à esquerda da vista frontal do robô.
 8. Clique **Desligar câmera**. O indicador físico de uso da webcam deve apagar; imagem, pose e métricas são descartadas.
-9. Selecione **Demonstração** no painel do robô. Esse modo desliga qualquer sessão de webcam e é identificado como movimento programado. Em **Controle de animação → Rotina de demonstração**, escolha **Explorar articulações** (sequência de 16 segundos) ou **Sequência de socos** (guarda e golpes alternados). **Pausar/Continuar** congela/retoma a pose e o relógio da demonstração.
+9. Selecione **Demonstração** no painel do robô. Esse modo desliga qualquer sessão de webcam e é identificado como movimento programado. Em **Controle de animação → Rotina de demonstração**, escolha **Explorar articulações** (sequência de 16 segundos) ou **Sequência de golpes** (socos, ganchos e uppercuts alternados). **Pausar/Continuar** congela/retoma a pose e o relógio da demonstração.
 10. Alterne **Frontal/Perspectiva** e experimente a qualidade **Leve** (DPR 1, sem sombras), ou **Equilibrada** (DPR até 1,5, sombras limitadas). O enquadramento se adapta à proporção do painel. Para voltar ao corpo, escolha **Seus movimentos** e inicie a câmera; o botão da câmera também seleciona essa fonte.
 11. Com a câmera ativa, no painel **Do movimento ao gesto**, clique em **Calibrar movimentos**. Relaxe os ombros e mantenha os punhos visíveis à frente da cintura por aproximadamente 1,5 s. Depois mantenha os dois punhos próximos ao rosto, com cotovelos flexionados, por aproximadamente 1,2 s. Perda de visibilidade ou movimentos excessivos reiniciam o tempo da etapa. É possível cancelar ou recalibrar.
-12. Após a calibração, assuma a guarda, estenda um punho à frente de cada vez e retorne à guarda entre os socos. Observe o último gesto, as extensões e a confiança da profundidade **de cada braço**. Incline o tronco lateralmente para testar esquivas. Os nomes esquerdo/direito referem-se ao lado anatômico do jogador, independentemente do espelhamento da tela.
-13. Se aparecer **Extensão 2D · soco indisponível**, o braço não tem profundidade suficientemente confiável. Guarda e inclinações podem continuar sendo analisadas, mas o sistema não inventa um soco frontal a partir de uma trajetória apenas lateral. Reenquadre-se e mantenha punhos/cotovelos visíveis. Toda nova sessão de câmera exige nova calibração.
-14. Com **Animações de soco** habilitadas, cada soco reconhecido pode assumir temporariamente o braço correspondente do robô, com preparação, extensão e recolhimento. O braço oposto segue o corpo. O painel de animação informa o lado **do robô**; o painel de gestos informa o lado **do jogador**. O espelhamento pode trocar esses lados.
-15. Ajuste **Duração do golpe** e **Amplitude** para o próximo soco, ou desative as animações para comparar com o espelhamento direto. Um golpe deve terminar antes do próximo: gestos recebidos durante ataque/retorno são descartados, sem fila ou combos. **Diagnóstico da transição** exibe o peso e a janela temporal; ela não calcula acerto ou dano.
+12. Após a calibração, assuma a guarda, estenda um punho à frente de cada vez e retorne à guarda entre os socos. Observe o último gesto e o alcance **de cada braço**: um soco conta a partir de 80%. Incline o tronco lateralmente para testar esquivas. Os nomes esquerdo/direito referem-se ao lado anatômico do jogador, independentemente do espelhamento da tela.
+13. Para um **gancho**, abra o punho além do ombro e cruze até o centro, na altura do peito ao rosto, com o cotovelo dobrado. Para um **uppercut**, desça o punho abaixo da linha dos ombros e suba com o cotovelo dobrado. A outra mão fica parada na guarda. Se notar golpes indevidos, desative **Ganchos e uppercuts**. Toda nova sessão de câmera exige nova calibração.
+14. Com **Animações de golpe** habilitadas, cada golpe reconhecido pode assumir temporariamente o braço correspondente do robô, com preparação, extensão e recolhimento. O braço oposto segue o corpo. O painel de animação informa o lado **do robô**; o painel de gestos informa o lado **do jogador**. O espelhamento pode trocar esses lados.
+15. Ajuste **Duração do golpe** e **Amplitude** para o próximo soco, ou desative as animações para comparar com o espelhamento direto. Um golpe deve terminar antes do próximo: gestos recebidos durante ataque/retorno são descartados, sem fila. **Diagnóstico da transição** exibe o peso e a janela temporal; ela não calcula acerto ou dano.
 
 Também revise manualmente: negar a permissão; desconectar a câmera; fechar/ocultar a aba; cancelar durante o carregamento; iniciar novamente; sair do quadro e retornar; ocultar um braço; usar pouca luz; reduzir a largura da janela para 375 px. A câmera para ao ocultar a página e exige novo clique ao voltar, por privacidade e economia de recursos.
 
@@ -108,7 +113,7 @@ Se a permissão foi negada, libere-a nas configurações do site no navegador. S
 - Erro de renderização isolado do painel da câmera, fallback para WebGL indisponível e reabertura após perda de contexto gráfico.
 - Calibração guiada em duas etapas, com validação de confiança, proporções, estabilidade e postura; nenhuma detecção de gesto antes de concluir as duas etapas.
 - Posições relativas ao tronco, velocidades normalizadas por largura dos ombros, ângulo do cotovelo, extensão do braço e disponibilidade de profundidade por cadeia.
-- Reconhecimento heurístico de socos retos esquerdo/direito, guarda e inclinação lateral. Retração, velocidade, extensão, janela temporal, dois frames coerentes, cooldown e histerese limitam falsos positivos e repetição.
+- Reconhecimento heurístico de socos retos esquerdo/direito, guarda e inclinação lateral. O alcance do soco é reconstruído pelo encurtamento do braço na imagem e pelos comprimentos calibrados, sem exigir profundidade; retração, janela temporal, cooldown e histerese limitam falsos positivos e repetição.
 - Histórico limitado aos últimos seis gestos, sem persistência. Demo, calibração e câmera inativa não geram eventos de combate.
 - Clips procedurais próprios de soco esquerdo/direito, com máscara do braço e pequena contribuição do tronco. O braço oposto e a cabeça continuam recebendo suas rotações do acompanhamento corporal.
 - Máquina de estados visuais independente do reconhecimento: repouso, espelhamento, guarda, esquiva, socos e retorno após interrupção. Guarda e esquiva mantêm a pose corporal, sem clips adicionais.
@@ -128,6 +133,12 @@ Se a permissão foi negada, libere-a nas configurações do site no navegador. S
 - Narração em região `aria-live` para início de rounds, contatos com integridade restante, fim de round e resultado. O aviso visual de impacto deixou de ser anunciado em duplicidade.
 - Integridade crítica (≤ 25) destacada também por texto, não apenas por cor; o medidor informa o valor em texto acessível.
 - Respeito a movimento reduzido: tremor desligado e faíscas reduzidas pela metade, com aviso no painel.
+- Ganchos e uppercuts opcionais, reconhecidos pela trajetória do punho, com exigência de velocidade, cotovelo dobrado e outra mão parada e erguida. Clips próprios, dano, duração e avanço diferentes do soco reto.
+- Seis combos com bônus de dano, contador de acertos seguidos, aviso visual, som e narração. A IA usa todos os golpes, sempre anunciados, encadeia ataques e se protege após contatos repetidos.
+- Garagem com prévia 3D: nome, seis blindagens, seis luzes, três cabeças e três ombreiras. As cores são aplicadas aos materiais existentes, sem recriar geometria.
+- Três cenários originais: Fundição, Porto noturno e Cânion, com luzes, cores e objetos próprios e o mesmo ringue.
+- Carreira local: até 200 partidas com webcam, estatísticas, pontuação e ranking das 10 melhores.
+- Replays a partir das rotações dos robôs, com linha do tempo, velocidade, sons, efeitos e narração. Os três mais recentes ficam salvos; demonstrações saem primeiro.
 
 ## Arquitetura
 
@@ -141,15 +152,20 @@ src/
 │   ├── motion-tracking/            # MediaPipe, sessão, overlay e stream de pose
 │   ├── robot/                      # Modelo, recursos e laboratório do rig
 │   ├── arena/                      # Cena do ringue, dois rigs, câmera e efeitos de impacto
+│   ├── customization/              # Catálogo visual, garagem e prévia 3D
+│   ├── career/                     # Estatísticas, ranking, replays e lista de combos
+│   ├── replay/                     # Controles de reprodução
 │   ├── audio/                      # Sintetizador Web Audio e mapeamento evento → som
 │   └── combat/                     # Ponte de captura/partida, HUD, controles, narração e sugestão de qualidade
 ├── engine/
 │   ├── motion/                    # Filtros, retargeting, calibração e velocidades
 │   ├── gestures/                  # Reconhecimento geométrico e temporal, sem animação
-│   ├── animation/                 # Clips de soco e controlador de blending/estados
-│   ├── combat/                    # Simulação, IA, geometria de contato e eventos
+│   ├── animation/                 # Clips de golpe e controlador de blending/estados
+│   ├── combat/                    # Simulação, IA, combos, geometria de contato e eventos
+│   ├── career/                    # Registro, pontuação, ranking e validação do histórico
+│   ├── replay/                    # Gravação, reprodução e formato salvo
 │   └── effects/                   # Partículas, anéis e tremor de câmera, sem Three.js
-├── stores/                        # Configurações, preferências de som/efeitos e snapshots da UI
+├── stores/                        # Configurações, perfil, carreira, replays e snapshots da UI
 └── types/                         # Landmarks, rig, clips e contratos de combate
 public/mediapipe/                   # Recursos gerados, ignorados pelo Git
 ```
@@ -160,13 +176,15 @@ public/mediapipe/                   # Recursos gerados, ignorados pelo Git
 
 `MotionCalibrator` e `MotionFeatureExtractor` são módulos puros que recebem poses tipadas. `GestureEngine` recebe somente características normalizadas e contexto da calibração. `combat-motion-runtime` conecta esses módulos às amostras reais e publica snapshots para a interface; eventos semânticos são publicados imediatamente, enquanto métricas usam a cadência reduzida do diagnóstico.
 
-`animation-signals` conserva somente o último pulso de soco, com sequência e geração da sessão. Eventos de postura não sobrescrevem esse pulso. No laboratório, `HybridAnimationController` recebe rotações base, contexto e pulso; sua saída é aplicada ao rig no mesmo frame. Clips não conhecem MediaPipe, React ou regras de dano.
+`animation-signals` conserva somente o último pulso de ataque, com sequência e geração da sessão. Eventos de postura não sobrescrevem esse pulso. No laboratório, `HybridAnimationController` recebe rotações base, contexto e pulso; sua saída é aplicada ao rig no mesmo frame. Clips não conhecem MediaPipe, React ou regras de dano.
 
 Um ataque tem prioridade sobre guarda/esquiva e bloqueia novos ataques até terminar. Pulsos repetidos, anteriores à montagem da cena, com mais de 250 ms, sem calibração ou fonte válida não iniciam animação. Parar a câmera, recalibrar e trocar para demonstração invalidam a geração. Desativar a camada não enfileira golpes para quando ela for reativada.
 
 Na arena, `MatchRuntime` recebe a captura real, verifica a fonte e entrega `CombatInput` ao `CombatEngine`. O motor controla o tempo dos clips, IA, contato, vida e rounds. `FighterFrame` contém as mesmas transformações usadas para calcular os contatos e desenhar os robôs. `ArenaCanvas` não decide dano; o HUD recebe somente cópias dos snapshots, sem transformar a simulação em estado React.
 
 O `CombatEngine` acumula eventos de apresentação em uma fila limitada a 64 itens; `MatchRuntime.subscribe` os entrega, em ordem, após cada passo. Uma falha em um ouvinte é registrada e não interrompe a simulação. Os módulos de `engine/effects` são puros e testáveis; `ArenaCanvas` apenas os desenha com um `InstancedMesh` de 64 faíscas (uma chamada de desenho) e quatro anéis reaproveitados. `CombatAudio` cria o `AudioContext` somente em um gesto do usuário e o suspende ao ocultar a página ou sair da arena.
+
+`ReplayRecorder` amostra o estado da partida a cada 1/24 s, sem tempo de pausa ou contagem, em inteiros de 16 bits. `ReplayPlayer` interpola esses quadros e expõe os mesmos `fighters` e `snapshot` de uma partida; por isso arena, HUD, som e efeitos não sabem a diferença. `MatchRuntime` alterna entre a simulação e o replay, e nunca grava carreira ou replay durante a reprodução. Dados salvos são validados campo a campo; entradas inválidas são descartadas.
 
 ### Frequências e processamento
 
@@ -183,8 +201,8 @@ O `CombatEngine` acumula eventos de apresentação em uma fila limitada a 64 ite
 - A preferência por movimento reduzido remove a oscilação decorativa das pernas e desacelera a demonstração. A resposta funcional ao corpo continua disponível.
 - A qualidade inicial é Leve para reduzir o custo de sombras e resolução; Equilibrada continua disponível. A cena memoizada evita propagar atualizações do diagnóstico pela árvore 3D. Não foi medida uma melhora de FPS no dispositivo do jogador.
 - Velocidade é calculada em unidades corporais por segundo, com suavização de 70 ms, validação de intervalo e reinicialização após ausência. A recuperação de profundidade inicia uma nova referência, sem inventar velocidade Z.
-- Socos exigem profundidade confiável no próprio braço, retração anterior, extensão crescente e velocidade predominante para a frente. Intervalo entre socos do mesmo braço: 500 ms, com nova retração obrigatória. A janela aceita trajetórias de 60–350 ms; guarda usa permanência de 150 ms e esquiva de 100 ms, com limiares diferentes de entrada/saída.
-- Um clip padrão dura **550 ms**, escalável de 0,75× a 1,35×. A máscara aumenta gradualmente até o impacto em 130 ms; a janela técnica vai de 130 ms (inclusivo) a 210 ms (exclusivo), escalada pela duração. O recolhimento leva o peso a zero sobre o tracking atual. Interrupções desfazem o peso em **180 ms** e fecham a janela imediatamente. Os tempos são editáveis em `combat-clips.ts`; não são estimativas da webcam.
+- Socos retos exigem retração anterior e alcance de 80% em até 400 ms, sem depender de profundidade. Intervalo entre golpes do mesmo braço: 350 ms, com nova retração obrigatória. Ganchos e uppercuts avaliam os últimos 380 ms da trajetória do punho; guarda usa permanência de 150 ms e esquiva de 100 ms, com limiares diferentes de entrada/saída.
+- Um clip de soco reto dura **550 ms**, o gancho **680 ms** e o uppercut **780 ms**, escalável de 0,75× a 1,35×. No soco reto, a máscara aumenta gradualmente até o impacto em 130 ms; a janela técnica vai de 130 ms (inclusivo) a 210 ms (exclusivo), escalada pela duração. O recolhimento leva o peso a zero sobre o tracking atual. Interrupções desfazem o peso em **180 ms** e fecham a janela imediatamente. Os tempos são editáveis em `combat-clips.ts`; não são estimativas da webcam.
 - Keyframes e opções são preparados uma vez por ataque. O sampler, a saída do controlador e os quaternions são reutilizados no loop; a UI recebe snapshots a cada 125 ms e nas mudanças de estado/fase/janela, sem estado React por frame.
 - O combate usa simulação fixa a 60 Hz, separada da inferência. O tempo acumulado por frame é limitado para evitar recuperação longa ao voltar de uma aba parada. Frames de ataque e volumes de contato são calculados juntos; a busca varrida do punho reduz a chance de atravessar o alvo entre amostras. Pausa não avança relógio, IA ou dano.
 
@@ -198,12 +216,14 @@ Os testes da fase 5 verificam a geometria de contato, regras, IA, pausa/recupera
 
 A fase 6 acrescenta testes da coerência dos eventos com as estatísticas de uma partida completa, partículas, anéis, tremor, mapeamento e síntese de som com um duplo do Web Audio, narração, sugestão de qualidade e preferências salvas. Veja o [relatório da fase 6](docs/phase-6-review.md).
 
-A prévia automática continua indisponível por uma permissão salva/política do navegador que bloqueou a origem local anteriormente, inclusive após autorização do usuário. Nesta fase não houve nova tentativa de contornar esse bloqueio. A aparência das animações, a resposta com webcam e o desempenho permanecem **pendentes de revisão real**. A demonstração é identificada como programada e não preenche os indicadores da webcam com dados artificiais. O [relatório da fase 3](docs/phase-3-review.md) preserva o histórico da correção frontal.
+A fase 7 acrescenta testes de combos, clips e contato dos novos golpes, reconhecimento de ganchos e uppercuts com casos de falso positivo, gravação/reprodução/validação de replays, carreira, perfil e catálogo visual. A arena, os cenários, a garagem, a carreira e o replay também foram conferidos no Chrome. Veja o [relatório da fase 7](docs/phase-7-review.md).
+
+A resposta de ganchos e uppercuts com webcam permanece **pendente de revisão real**. A demonstração é identificada como programada e não preenche os indicadores da webcam com dados artificiais. O [relatório da fase 3](docs/phase-3-review.md) preserva o histórico da correção frontal.
 
 ## Limitações atuais
 
-- Fases 1 a 6: somente socos retos, sem hook/uppercut/especial/combos. Não há fila de golpes nem ataques simultâneos do mesmo robô. Na arena os dois lutadores podem atacar ao mesmo tempo; a resolução considera o contato de cada um.
-- Hitboxes são aproximações geométricas de cabeça/corpo e punhos, sem física de contato entre peças ou IK para alcançar um alvo. A IA e o balanceamento são iniciais; os rounds e os resultados funcionam localmente, sem persistência.
+- Não há golpe especial nem multiplayer online, que exigiria um servidor. Carreira, ranking e replays existem só neste navegador e podem ser apagados com os dados do site. Não há fila de golpes nem ataques simultâneos do mesmo robô. Na arena os dois lutadores podem atacar ao mesmo tempo; a resolução considera o contato de cada um.
+- Hitboxes são aproximações geométricas de cabeça/corpo e punhos, sem física de contato entre peças ou IK para alcançar um alvo. A IA e o balanceamento são iniciais; os limiares de ganchos e uppercuts são iniciais.
 - Efeitos e sons são procedurais e simples: não há pós-processamento, bloom, câmera lenta, trilha musical ou locução gravada. Os sons foram verificados com um duplo do Web Audio, não por audição; timbre e volume precisam de revisão real.
 - A narração acessível cobre eventos da partida, mas o jogo continua exigindo movimento corporal visível pela câmera; não há modo alternativo de controle.
 - A inferência `detectForVideo` é síncrona e ocorre na thread principal. O teto de frequência e o modelo Lite reduzem o custo, mas podem ocorrer pausas durante carregamento ou em CPUs fracas. Não há Worker implementado. O contrato do backend preserva uma fronteira para futura migração, que exigirá um protocolo assíncrono e transferência de frames.
@@ -217,7 +237,7 @@ A prévia automática continua indisponível por uma permissão salva/política 
 - Resolução é uma preferência; dispositivos podem fornecer outra. A CPU de fallback pode reduzir a frequência efetiva.
 - O modelo e as alternativas SIMD/não-SIMD WASM ampliam `dist/` (aproximadamente 47 MB sem compressão); cada navegador carrega apenas o runtime selecionado. O runtime 3D adiciona aproximadamente 0,94 MB de JavaScript minificado, dividido em chunks.
 - O rig aproxima a silhueta e a flexão dos braços; não resolve colisões entre as partes do robô, não estima pegadas ou dedos, nem compensa completamente rotações fora do plano. Mantenha-se de frente para melhores resultados.
-- Não há testes de ponta a ponta no navegador nem aferição real dos gestos nesta entrega. Câmera/CPU e renderização compartilham a thread principal; use 480p e qualidade Leve se houver lentidão.
+- Não há testes automatizados de ponta a ponta no navegador nem aferição real dos novos gestos nesta entrega. Câmera/CPU e renderização compartilham a thread principal; use 480p e qualidade Leve se houver lentidão.
 
 ## Roadmap e autorização
 
@@ -226,10 +246,10 @@ A prévia automática continua indisponível por uma permissão salva/política 
 3. **Motion engine e gestos:** implementada; calibração, guarda, esquivas, socos e correção frontal.
 4. **Animações híbridas:** implementada; clips, máscaras e transições suaves.
 5. **Arena e combate:** implementada; IA, contato, vida, defesa, rounds e resultados.
-6. **Polimento:** implementação atual para revisão; efeitos de impacto, som procedural, acessibilidade e sugestão de qualidade.
-7. **Expansões:** somente mediante autorização futura.
+6. **Polimento:** implementada; efeitos de impacto, som procedural, acessibilidade e sugestão de qualidade.
+7. **Expansões:** implementação atual para revisão; combos avançados, personalização, cenários, carreira, ranking local e replays. O multiplayer online fica para uma fase própria, com backend.
 
-O desenvolvimento está interrompido ao final da fase 6 para revisão antes do commit. A fase 7 exige nova autorização. Sugestão de commit: `feat: add impact effects, procedural audio and accessibility polish`.
+O desenvolvimento está interrompido ao final da fase 7 para revisão antes do commit. Sugestão de commit: `feat: add advanced combos, robot customization, arenas, career and replays`.
 
 ## Referências técnicas
 

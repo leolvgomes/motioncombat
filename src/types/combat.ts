@@ -1,7 +1,7 @@
 import type { Quaternion } from 'three'
 import type { RigJointName } from './robot'
 import type { AnimationGestureSignal } from '../features/robot/animation-signals'
-import type { AttackSide } from './animation'
+import type { AttackKind, AttackSide } from './animation'
 
 export type FighterId = 'player' | 'opponent'
 export type MatchMode = 'webcam' | 'demo'
@@ -9,6 +9,7 @@ export type MatchPhase = 'ready' | 'countdown' | 'fighting' | 'round-over' | 'fi
 export type PauseReason = 'manual' | 'tracking' | 'view' | 'hidden'
 export type MatchWinner = FighterId | 'draw'
 export type FighterAction = 'idle' | 'approaching' | 'guard' | 'telegraph' | 'attacking' | 'retreating' | 'stunned' | 'victory' | 'defeat'
+export type ComboId = 'one-two' | 'ascension' | 'double-gate' | 'triple-hammer' | 'steel-storm' | 'full-sync'
 export type CombatRotations = Record<RigJointName, Quaternion>
 
 /** Reused display transforms, authored on the same joints as the laboratory rig. */
@@ -18,6 +19,8 @@ export interface FighterFrame {
   readonly rotations: Readonly<CombatRotations>
   readonly action: FighterAction
   readonly attackSide: AttackSide | null
+  /** Kind of the running or announced attack. */
+  readonly attackKind: AttackKind | null
   readonly attackProgress: number
   readonly hitActive: boolean
   readonly hitFlash: number
@@ -30,11 +33,23 @@ export interface FighterStats {
   readonly blocks: number
   readonly dodges: number
   readonly damage: number
+  readonly combos: number
+  /** Longest run of consecutive landed hits. */
+  readonly bestStreak: number
+}
+
+export interface ComboEvent {
+  readonly id: number
+  readonly fighter: FighterId
+  readonly combo: ComboId
+  /** Nominal bonus, already part of the finishing hit. */
+  readonly bonus: number
 }
 
 export interface ImpactEvent {
   readonly id: number
   readonly attacker: FighterId
+  readonly kind: AttackKind
   readonly result: 'hit' | 'blocked' | 'dodged' | 'miss'
   readonly damage: number
 }
@@ -43,9 +58,10 @@ export interface ImpactEvent {
 export type CombatEvent =
   | { readonly type: 'countdown'; readonly round: number; readonly value: number }
   | { readonly type: 'fight'; readonly round: number }
-  | { readonly type: 'attack'; readonly fighter: FighterId; readonly side: AttackSide }
-  | { readonly type: 'telegraph'; readonly fighter: FighterId; readonly side: AttackSide }
+  | { readonly type: 'attack'; readonly fighter: FighterId; readonly side: AttackSide; readonly kind: AttackKind }
+  | { readonly type: 'telegraph'; readonly fighter: FighterId; readonly side: AttackSide; readonly kind: AttackKind }
   | { readonly type: 'impact'; readonly impact: ImpactEvent; readonly position: readonly [number, number, number]; readonly defenderHealth: number }
+  | { readonly type: 'combo'; readonly combo: ComboEvent }
   | { readonly type: 'round-end'; readonly round: number; readonly winner: MatchWinner; readonly knockout: boolean }
   | { readonly type: 'match-end'; readonly winner: MatchWinner; readonly mode: MatchMode }
 
@@ -64,6 +80,9 @@ export interface CombatSnapshot {
   readonly roundWinner: MatchWinner | null
   readonly winner: MatchWinner | null
   readonly lastImpact: ImpactEvent | null
+  readonly lastCombo: ComboEvent | null
+  readonly playerStreak: number
+  readonly opponentStreak: number
   readonly playerStats: FighterStats
   readonly opponentStats: FighterStats
 }

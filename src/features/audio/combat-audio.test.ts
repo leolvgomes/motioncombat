@@ -56,15 +56,15 @@ function audio() {
   return { context, factory, audio: new CombatAudio(factory) }
 }
 
-const ALL_CUES: SoundCue[] = ['countdown', 'fight', 'swing', 'hit', 'knockout', 'block', 'dodge', 'telegraph', 'round-end', 'victory', 'defeat', 'draw']
+const ALL_CUES: SoundCue[] = ['countdown', 'fight', 'swing', 'hit', 'knockout', 'block', 'dodge', 'telegraph', 'combo', 'round-end', 'victory', 'defeat', 'draw']
 const impact = (result: 'hit' | 'blocked' | 'dodged' | 'miss', defenderHealth = 50): CombatEvent =>
-  ({ type: 'impact', impact: { id: 1, attacker: 'opponent', result, damage: 12 }, position: [0, 1, 0], defenderHealth })
+  ({ type: 'impact', impact: { id: 1, attacker: 'opponent', kind: 'straight', result, damage: 12 }, position: [0, 1, 0], defenderHealth })
 
 describe('combat sound mapping', () => {
   it('maps each meaningful event to one cue and stays silent for misses', () => {
     expect(cueForEvent({ type: 'countdown', round: 1, value: 3 }, 'webcam')).toBe('countdown')
     expect(cueForEvent({ type: 'fight', round: 2 }, 'demo')).toBe('fight')
-    expect(cueForEvent({ type: 'attack', fighter: 'player', side: 'left' }, 'webcam')).toBe('swing')
+    expect(cueForEvent({ type: 'attack', fighter: 'player', side: 'left', kind: 'straight' }, 'webcam')).toBe('swing')
     expect(cueForEvent(impact('hit'), 'webcam')).toBe('hit')
     expect(cueForEvent(impact('blocked'), 'webcam')).toBe('block')
     expect(cueForEvent(impact('dodged'), 'webcam')).toBe('dodge')
@@ -75,9 +75,9 @@ describe('combat sound mapping', () => {
   })
 
   it('warns only a webcam player about the opponent wind-up', () => {
-    expect(cueForEvent({ type: 'telegraph', fighter: 'opponent', side: 'left' }, 'webcam')).toBe('telegraph')
-    expect(cueForEvent({ type: 'telegraph', fighter: 'opponent', side: 'left' }, 'demo')).toBeNull()
-    expect(cueForEvent({ type: 'telegraph', fighter: 'player', side: 'left' }, 'webcam')).toBeNull()
+    expect(cueForEvent({ type: 'telegraph', fighter: 'opponent', side: 'left', kind: 'straight' }, 'webcam')).toBe('telegraph')
+    expect(cueForEvent({ type: 'telegraph', fighter: 'opponent', side: 'left', kind: 'straight' }, 'demo')).toBeNull()
+    expect(cueForEvent({ type: 'telegraph', fighter: 'player', side: 'left', kind: 'straight' }, 'webcam')).toBeNull()
   })
 
   it('chooses the ending from the player perspective, and neutral fanfare for demos', () => {
@@ -88,7 +88,7 @@ describe('combat sound mapping', () => {
   })
 
   it('identifies the fighter that owns a sound', () => {
-    expect(cueFighter({ type: 'attack', fighter: 'opponent', side: 'right' })).toBe('opponent')
+    expect(cueFighter({ type: 'attack', fighter: 'opponent', side: 'right', kind: 'straight' })).toBe('opponent')
     expect(cueFighter(impact('hit'))).toBe('opponent')
     expect(cueFighter({ type: 'fight', round: 1 })).toBeNull()
   })

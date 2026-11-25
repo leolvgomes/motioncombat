@@ -1,5 +1,5 @@
 import { Quaternion, Vector3 } from 'three'
-import type { AttackSide, PunchClipSampler } from '../../types/animation'
+import type { AttackKind, AttackSide, PunchClipSampler } from '../../types/animation'
 import type { CombatInput, CombatRotations, FighterAction, FighterFrame, FighterId, FighterStats } from '../../types/combat'
 import type { RigJointName, RigPose } from '../../types/robot'
 import { createCombatGuardPose, createPunchClipSampler } from '../animation/combat-clips'
@@ -7,7 +7,8 @@ import { RIG_JOINTS } from '../motion/rig-controller'
 import { createRestPose, sampleDemoPose } from '../motion/retarget'
 import { CombatAI } from './ai'
 import { CombatHitGeometry } from './collision'
-import { COMBAT_RULES } from './config'
+import { ComboTracker } from './combos'
+import { ATTACK_RULES, COMBAT_RULES } from './config'
 
 type MutableFrame = { -readonly [Key in keyof FighterFrame]: Key extends 'position' ? [number, number, number]
   : Key extends 'rotations' ? CombatRotations : FighterFrame[Key] }
@@ -15,6 +16,7 @@ type MutableStats = { -readonly [Key in keyof FighterStats]: FighterStats[Key] }
 
 export interface FighterAttack {
   readonly side: AttackSide
+  readonly kind: AttackKind
   readonly shoulder: 'leftShoulder' | 'rightShoulder'
   readonly sampler: PunchClipSampler
   elapsed: number
@@ -34,7 +36,7 @@ function rotations(pose: RigPose): CombatRotations {
 function frame(pose: RigPose, yaw: number): MutableFrame {
   return {
     position: [0, 0, 0], yaw, rotations: rotations(pose), action: 'idle',
-    attackSide: null, attackProgress: 0, hitActive: false, hitFlash: 0, blocking: false,
+    attackSide: null, attackKind: null, attackProgress: 0, hitActive: false, hitFlash: 0, blocking: false,
   }
 }
 
@@ -46,7 +48,8 @@ function usable(rotation: Quaternion): boolean {
 /** One reusable fighter pose, its authored attack and independent defensive state. */
 export class CombatFighter {
   readonly frame: MutableFrame
-  readonly stats: MutableStats = { attacks: 0, hits: 0, blocks: 0, dodges: 0, damage: 0 }
+  readonly stats: MutableStats = { attacks: 0, hits: 0, blocks: 0, dodges: 0, damage: 0, combos: 0, bestStreak: 0 }
+  readonly combo = new ComboTracker()
   readonly collisionFrame: MutableFrame
   readonly sweepFrom = new Vector3()
   readonly sweepTo = new Vector3()
@@ -66,6 +69,7 @@ export class CombatFighter {
   action: FighterAction = 'idle'
   blocking = false
   telegraphSide: AttackSide | null = null
+  telegraphKind: AttackKind = 'straight'
   private readonly scratch = new Quaternion()
   private readonly torsoCompensation = new Quaternion()
   private readonly yawSign: 1 | -1
@@ -101,7 +105,8 @@ export class CombatFighter {
     this.action = 'idle'
     this.blocking = false
     this.telegraphSide = null
-    if (clearStats) for (const key of ['attacks', 'hits', 'blocks', 'dodges', 'damage'] as const) this.stats[key] = 0
+    this.combo.break()
+    if (clearStats) for (const key of ['attacks', 'hits', 'blocks', 'dodges', 'damage', 'combos', 'bestStreak'] as const) this.stats[key] = 0
     this.clearMask()
     this.frame.position[0] = 0
     this.frame.position[1] = 0
@@ -109,6 +114,7 @@ export class CombatFighter {
     this.frame.hitFlash = 0
     this.frame.hitActive = false
     this.frame.attackSide = null
+    this.frame.attackKind = null
     this.frame.attackProgress = 0
     this.frame.action = 'idle'
     this.frame.blocking = false
@@ -117,9 +123,9 @@ export class CombatFighter {
 
   get available(): boolean { return this.health > 0 && !this.attack && this.stun <= 0 && this.returning <= 0 }
 
-  beginAttack(side: AttackSide): boolean {
+  beginAttack(side: AttackSide, kind: AttackKind = 'straight'): boolean {
     if (!this.available) return false
-    this.attack = { side, shoulder: `${side}Shoulder`, sampler: createPunchClipSampler(side), elapsed: 0, previousElapsed: 0, resolved: false, dodged: false }
+    this.attack = { side, kind, shoulder: `${side}Shoulder`, sampler: createPunchClipSampler(side, undefined, kind), elapsed: 0, previousElapsed: 0, resolved: false, dodged: false }
     this.blocking = false
     this.telegraphSide = null
     this.stats.attacks += 1
@@ -128,6 +134,7 @@ export class CombatFighter {
   }
 
   advance(elapsed: number): void {
+    this.combo.advance(elapsed)
     this.stun = Math.max(0, this.stun - elapsed)
     this.advanceVisual(elapsed)
     if (this.attack) {
@@ -160,6 +167,7 @@ export class CombatFighter {
     }
     this.frame.hitActive = false
     this.frame.attackSide = null
+    this.frame.attackKind = null
     this.frame.attackProgress = 0
     this.blocking = false
     this.telegraphSide = null
@@ -171,7 +179,7 @@ export class CombatFighter {
     this.frame.hitFlash = actual > 0 ? 1 : this.frame.hitFlash
     this.stun = actual > 0 ? COMBAT_RULES.stunSeconds : this.stun
     this.cancel()
-    this.brain.react()
+    this.brain.react(actual > 0)
     return actual
   }
 
@@ -193,6 +201,7 @@ export class CombatFighter {
     }
     target.action = outcome ?? (this.stun > 0 ? 'stunned' : this.attack ? 'attacking' : this.blocking ? 'guard' : this.action)
     target.attackSide = this.attack?.side ?? this.telegraphSide
+    target.attackKind = this.attack?.kind ?? (this.telegraphSide ? this.telegraphKind : null)
     target.attackProgress = this.attack ? this.attack.elapsed / this.attack.sampler.duration : 0
     target.hitActive = this.attack !== null && !this.attack.resolved
       && this.attack.elapsed >= this.attack.sampler.hitWindow.start && this.attack.elapsed < this.attack.sampler.hitWindow.end
@@ -222,7 +231,7 @@ export class CombatFighter {
           target.rotations[name].slerp(this.scratch, weight)
         }
       }
-      lunge = COMBAT_RULES.lungeDistance * (sample.weights[this.attack.shoulder] ?? 0)
+      lunge = ATTACK_RULES[this.attack.kind].lunge * (sample.weights[this.attack.shoulder] ?? 0)
     } else if (this.returning > 0) {
       const remaining = this.returning / COMBAT_RULES.returnSeconds
       const strength = remaining * remaining * (3 - 2 * remaining)
@@ -244,8 +253,11 @@ export class CombatFighter {
       target.rotations.torso.multiply(this.scratch.setFromAxisAngle(X_AXIS, -recoil))
     } else if (this.telegraphSide && !this.attack) {
       const side = this.telegraphSide === 'left' ? 1 : -1
-      target.rotations[`${this.telegraphSide}Shoulder`].multiply(this.scratch.setFromAxisAngle(Y_AXIS, side * 0.16))
-      target.rotations.torso.multiply(this.scratch.setFromAxisAngle(Z_AXIS, side * 0.025))
+      // Each attack announces itself with a different readable wind-up.
+      const opening = this.telegraphKind === 'hook' ? 0.42 : 0.16
+      const tilt = this.telegraphKind === 'uppercut' ? -0.13 : 0.025
+      target.rotations[`${this.telegraphSide}Shoulder`].multiply(this.scratch.setFromAxisAngle(Y_AXIS, side * opening))
+      target.rotations.torso.multiply(this.scratch.setFromAxisAngle(Z_AXIS, side * tilt))
     }
     target.position[0] = this.dodge
     target.position[1] = 0

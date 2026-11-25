@@ -1,0 +1,533 @@
+/* Phase 07: combos, replay controls, garage and career. */
+
+.expansion-panel {
+  grid-column: 1 / -1;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid #34434c;
+  border-radius: 7px;
+  background: #11191f;
+}
+
+.expansion-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 24px;
+  border-bottom: 1px solid #2d3d47;
+}
+
+.expansion-heading h2 {
+  margin: 6px 0 0;
+  color: #e1eaf0;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.expansion-heading p,
+.expansion-note,
+.expansion-empty,
+.expansion-warning {
+  margin: 6px 0 0;
+  color: #8fa7b5;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.expansion-empty {
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px dashed #34505f;
+  border-radius: 4px;
+}
+
+.expansion-warning {
+  color: #e0b48d;
+}
+
+.combat-workspace-grid.is-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.combat-workspace-grid.is-single > .camera-panel {
+  max-width: 640px;
+}
+
+/* Combos and streaks */
+
+.combat-streak {
+  margin-left: auto;
+  color: #f3c08f;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-style: normal;
+  letter-spacing: .6px;
+}
+
+.combat-fighter-hud.is-opponent .combat-streak {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+.combat-combo {
+  position: absolute;
+  top: 40%;
+  left: 32px;
+  z-index: 4;
+  display: grid;
+  gap: 4px;
+  padding: 13px 20px;
+  border-left: 3px solid var(--cyan);
+  border-radius: 0 5px 5px 0;
+  background: #0c1720e6;
+  pointer-events: none;
+}
+
+.combat-combo.is-opponent {
+  right: 32px;
+  left: auto;
+  border-left: 0;
+  border-right: 3px solid #ef995d;
+  border-radius: 5px 0 0 5px;
+  text-align: right;
+}
+
+.combat-combo > span,
+.combat-combo > small {
+  color: #a5bdca;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .8px;
+}
+
+.combat-combo > strong {
+  color: #f2f7f9;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -.4px;
+}
+
+.motion-advanced {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #263843;
+}
+
+.motion-advanced > small {
+  display: block;
+  margin-top: 6px;
+  color: #8199a7;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+/* Replay */
+
+.replay-controls {
+  display: flex;
+  flex: 1 1 480px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.replay-timeline {
+  display: flex;
+  flex: 1 1 200px;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.replay-timeline > input {
+  flex: 1 1 auto;
+  min-width: 80px;
+  accent-color: var(--orange);
+}
+
+.replay-timeline > output {
+  color: #a5bdca;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.replay-list,
+.combo-list {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.replay-list > li,
+.combo-list > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 12px 14px;
+  border: 1px solid #293c48;
+  border-radius: 4px;
+  background: #0f1c2680;
+}
+
+.replay-list > li > div {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.replay-list strong,
+.combo-list strong {
+  color: #dbe8ef;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.replay-list small {
+  display: block;
+  margin-top: 3px;
+  color: #8ba4b3;
+  font-size: 11px;
+}
+
+.combo-list {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.combo-list > li > span {
+  flex: 1 1 100%;
+  order: 3;
+  color: #9bb2c0;
+  font-size: 12px;
+}
+
+.combo-list > li > small {
+  margin-left: auto;
+  color: #f3c08f;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+/* Career */
+
+.career-section {
+  padding: 20px 24px 24px;
+}
+
+.career-section + .career-section {
+  border-top: 1px solid #26363f;
+}
+
+.career-section > h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: #c8dbe6;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.career-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1px;
+  margin: 14px 0 0;
+  border: 1px solid #293c48;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #293c48;
+}
+
+.career-tiles > div {
+  padding: 14px 16px;
+  background: #111d26;
+}
+
+.career-tiles dt {
+  color: #8ba4b3;
+  font-size: 11px;
+}
+
+.career-tiles dd {
+  margin: 4px 0 0;
+}
+
+.career-tiles strong {
+  display: block;
+  color: #e6f0f5;
+  font-size: 24px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.career-tiles small {
+  color: #8ba4b3;
+  font-size: 11px;
+}
+
+.career-table {
+  margin-top: 18px;
+  overflow-x: auto;
+}
+
+.career-table table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.career-table caption {
+  padding-bottom: 10px;
+  color: #c8dbe6;
+  font-size: 13px;
+  text-align: left;
+}
+
+.career-table th,
+.career-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid #263b49;
+  color: #b9cfdb;
+  font-weight: 400;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.career-table thead th {
+  color: #8aa9bc;
+  font-size: 11px;
+}
+
+.career-table td:last-child,
+.career-table th:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.career-table .is-first th,
+.career-table .is-first td {
+  color: #f3c08f;
+}
+
+.career-clear {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.career-clear > p {
+  margin: 0;
+  color: #e0b48d;
+  font-size: 12px;
+}
+
+/* Garage */
+
+.garage-grid {
+  display: grid;
+  grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+}
+
+.garage-preview {
+  position: relative;
+  min-height: 440px;
+  border-right: 1px solid #2d3d47;
+  background: #0c141b;
+}
+
+.garage-canvas,
+.garage-message {
+  position: absolute;
+  inset: 0;
+}
+
+.garage-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  color: #9bb2c0;
+  font-size: 12px;
+  text-align: center;
+}
+
+.garage-nameplate {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  padding: 6px 14px;
+  border: 1px solid #3c5360;
+  border-radius: 4px;
+  background: #0c1720d9;
+  color: #e6f0f5;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.garage-form {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+  padding: 22px 24px 26px;
+}
+
+.garage-name {
+  display: grid;
+  gap: 6px;
+  color: #a9c0cd;
+  font-size: 12px;
+}
+
+.garage-name > input {
+  width: 100%;
+  max-width: 280px;
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1px solid #3a5462;
+  border-radius: 4px;
+  background: #0d1820;
+  color: #e6f0f5;
+  font-family: var(--mono);
+  font-size: 14px;
+  text-transform: uppercase;
+}
+
+.garage-name > small {
+  color: #8199a7;
+  font-size: 11px;
+}
+
+.garage-group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.garage-group > legend {
+  margin-bottom: 8px;
+  padding: 0;
+  color: #a9c0cd;
+  font-size: 12px;
+}
+
+.garage-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.garage-option {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 13px;
+  border: 1px solid #304654;
+  border-radius: 4px;
+  background: #16242e80;
+  color: #b4cad6;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.garage-option > input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.garage-option.is-selected {
+  border-color: var(--orange);
+  background: #ff713d14;
+  color: #f3e4da;
+}
+
+.garage-option:focus-within {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+.garage-option small {
+  display: block;
+  margin-top: 2px;
+  color: #8ba4b3;
+  font-size: 11px;
+}
+
+.garage-swatch {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 1px solid #ffffff40;
+  border-radius: 50%;
+}
+
+@media (max-width: 900px) {
+  .garage-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .garage-preview {
+    min-height: 340px;
+    border-right: 0;
+    border-bottom: 1px solid #2d3d47;
+  }
+}
+
+@media (max-width: 650px) {
+  .workspace-view-tabs {
+    flex-wrap: wrap;
+  }
+
+  .workspace-view-tabs > button {
+    flex: 1 1 40%;
+  }
+
+  .expansion-heading,
+  .career-section,
+  .garage-form {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+
+  .combat-combo,
+  .combat-combo.is-opponent {
+    top: 34%;
+    padding: 9px 13px;
+  }
+
+  .combat-combo {
+    left: 0;
+  }
+
+  .combat-combo.is-opponent {
+    right: 0;
+  }
+
+  .combat-combo > strong {
+    font-size: 17px;
+  }
+
+  .replay-controls > button {
+    flex: 1 1 auto;
+  }
+}
