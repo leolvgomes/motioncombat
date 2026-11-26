@@ -400,6 +400,23 @@
   line-height: 1.6;
 }
 
+.combat-auto-resume {
+  width: min(220px, 70%);
+  height: 4px;
+  margin: 4px auto 6px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: rgb(120 147 165 / 25%);
+}
+
+.combat-auto-resume > span {
+  display: block;
+  height: 100%;
+  background: #4be3c1;
+  transform-origin: left;
+  transition: transform 120ms linear;
+}
+
 .combat-stage-banner > span {
   color: #af957e;
   font-family: var(--mono);

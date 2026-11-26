@@ -9,7 +9,7 @@ import type { ProcessedPose } from '../../types/motion'
 import { combatMotionRuntime } from '../motion-tracking/combat-motion-runtime'
 import { publishPose } from '../motion-tracking/pose-stream'
 import { publishAnimationGesture, resetAnimationSignals } from '../robot/animation-signals'
-import { MatchRuntime } from './match-runtime'
+import { AUTO_RESUME_MS, MatchRuntime } from './match-runtime'
 
 let now = 1000
 let runtime: MatchRuntime
@@ -43,6 +43,7 @@ beforeEach(() => {
   resetAnimationSignals()
   combatMotionRuntime.reset()
   useLabStore.setState({ session: { status: 'running', delegate: 'CPU', error: null }, mirrored: false })
+  useMatchStore.setState({ sceneFps: 60 })
   useRobotStore.setState({ mode: 'tracking' })
   vi.spyOn(combatMotionRuntime, 'calibrated', 'get').mockReturnValue(true)
   vi.spyOn(combatMotionRuntime, 'motionValid', 'get').mockReturnValue(true)
@@ -224,6 +225,82 @@ describe('capture and match bridge', () => {
     expect(runtime.resume()).toBe(true)
     advance(0.3)
     expect(runtime.snapshot.playerStats.attacks).toBe(0)
+  })
+
+  it('resumes by itself once the returning player holds the guard', () => {
+    const posture = vi.spyOn(combatMotionRuntime, 'currentPosture', 'get').mockReturnValue('neutral')
+    runtime.start('webcam')
+    advance(3.2)
+    const time = runtime.snapshot.secondsLeft
+    publishPose(null)
+    advance(1, false)
+    expect(runtime.snapshot.pauseReason).toBe('tracking')
+    // Back in view, arms down: the match keeps waiting.
+    advance(3)
+    expect(runtime.snapshot.pauseReason).toBe('tracking')
+    posture.mockReturnValue('guard')
+    advance((AUTO_RESUME_MS - 200) / 1000)
+    expect(runtime.snapshot.pauseReason).toBe('tracking')
+    expect(useMatchStore.getState().autoResume).toBeGreaterThan(0)
+    // Dropping the guard restarts the hold.
+    posture.mockReturnValue('neutral')
+    advance(0.1)
+    posture.mockReturnValue('guard')
+    advance((AUTO_RESUME_MS - 200) / 1000)
+    expect(runtime.snapshot.pauseReason).toBe('tracking')
+    advance(0.3)
+    expect(runtime.snapshot.pauseReason).toBeNull()
+    expect(useMatchStore.getState().autoResume).toBeNull()
+    // Only the frames after the resume inside the last step have run.
+    expect(time - runtime.snapshot.secondsLeft).toBeLessThan(0.2)
+    advance(0.5)
+    expect(runtime.snapshot.secondsLeft).toBeLessThan(time - 0.4)
+  })
+
+  it('arms a start that waits for the player to take position in guard', () => {
+    const posture = vi.spyOn(combatMotionRuntime, 'currentPosture', 'get').mockReturnValue('neutral')
+    // At the computer: too close to be framed, but the camera is running and calibrated.
+    publishPose(null)
+    expect(runtime.arm()).toBe(true)
+    expect(useMatchStore.getState().armed).toBe(true)
+    advance(5, false)
+    expect(runtime.snapshot.phase).toBe('ready')
+    advance(3)
+    expect(runtime.snapshot.phase).toBe('ready')
+    posture.mockReturnValue('guard')
+    advance((AUTO_RESUME_MS - 200) / 1000)
+    expect(runtime.snapshot.phase).toBe('ready')
+    expect(useMatchStore.getState().autoResume).toBeGreaterThan(0)
+    advance(0.3)
+    expect(runtime.snapshot.phase).toBe('countdown')
+    expect(runtime.snapshot.mode).toBe('webcam')
+    expect(useMatchStore.getState()).toMatchObject({ armed: false, autoResume: null })
+  })
+
+  it('cancels an armed start and refuses to arm without calibration', () => {
+    vi.spyOn(combatMotionRuntime, 'currentPosture', 'get').mockReturnValue('guard')
+    expect(runtime.arm()).toBe(true)
+    runtime.disarm()
+    advance(3)
+    expect(runtime.snapshot.phase).toBe('ready')
+    vi.spyOn(combatMotionRuntime, 'calibrated', 'get').mockReturnValue(false)
+    expect(runtime.arm()).toBe(false)
+    expect(useMatchStore.getState()).toMatchObject({ armed: false, canArm: false })
+  })
+
+  it('never releases a manual pause or a match without a visible arena by guard', () => {
+    vi.spyOn(combatMotionRuntime, 'currentPosture', 'get').mockReturnValue('guard')
+    runtime.start('webcam')
+    advance(3.2)
+    runtime.pause()
+    advance(3)
+    expect(runtime.snapshot.pauseReason).toBe('manual')
+    expect(runtime.resume()).toBe(true)
+    useMatchStore.setState({ sceneFps: null })
+    publishPose(null)
+    advance(1, false)
+    advance(3)
+    expect(runtime.snapshot.pauseReason).toBe('tracking')
   })
 
   it('does not interrupt the camera when a second start command is rejected', () => {

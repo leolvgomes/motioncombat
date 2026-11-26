@@ -26,7 +26,7 @@ const ArenaCanvas = lazy(() => import('../arena/ArenaCanvas'))
 
 const pauseMessages: Record<PauseReason, string> = {
   manual: 'Retome quando estiver pronto.',
-  tracking: 'Retome o enquadramento e mantenha braços e tronco visíveis. A partida aguarda um rastreamento válido.',
+  tracking: 'Volte para a frente da câmera e faça a guarda. A luta continua sozinha, sem precisar do mouse.',
   view: 'A partida foi suspensa ao interromper a visualização da arena.',
   hidden: 'A partida foi suspensa enquanto a página ficou em segundo plano.',
 }
@@ -128,6 +128,9 @@ export function CombatPanel() {
   const snapshot = useMatchStore((state) => state.snapshot)
   const sceneFps = useMatchStore((state) => state.sceneFps)
   const canFight = useMatchStore((state) => state.canFight)
+  const autoResume = useMatchStore((state) => state.autoResume)
+  const armed = useMatchStore((state) => state.armed)
+  const canArm = useMatchStore((state) => state.canArm)
   const playback = useReplayStore((state) => state.playback)
   const replays = useReplayStore((state) => state.replays)
   const records = useCareerStore((state) => state.records)
@@ -177,10 +180,10 @@ export function CombatPanel() {
   const rankPosition = matchRecord ? rankRecords(records).findIndex(({ id }) => id === matchRecord.id) + 1 : 0
   const sceneAvailable = sceneFps !== null && Number.isFinite(sceneFps) && sceneFps > 0
   const resumeAvailable = sceneAvailable && (demo || canFight)
-  const status = replaying ? playback.playing ? 'Reproduzindo replay' : 'Replay pausado' : paused ? 'Partida pausada' : ready ? 'Preparação' : finished ? 'Partida encerrada'
+  const status = replaying ? playback.playing ? 'Reproduzindo replay' : 'Replay pausado' : armed ? 'Aguardando sua guarda' : paused ? 'Partida pausada' : ready ? 'Preparação' : finished ? 'Partida encerrada'
     : snapshot.phase === 'countdown' ? 'Contagem regressiva' : snapshot.phase === 'round-over' ? 'Intervalo entre rounds' : 'Combate em andamento'
   const preparation = !sceneAvailable ? 'Aguarde a visualização 3D para iniciar.'
-    : !canFight ? 'Ligue a câmera, conclua a calibração e mantenha os braços visíveis para lutar.'
+    : !canArm ? 'Ligue a câmera e conclua a calibração para lutar.'
       : 'Rastreamento pronto. Assuma a guarda antes de iniciar.'
 
   // Every match command is a user gesture, the moment browsers allow audio to start.
@@ -218,11 +221,12 @@ export function CombatPanel() {
         <Suspense fallback={<div className="arena-renderer-error" role="status"><LoaderCircle className="spinning" size={28} aria-hidden="true" /><strong>Preparando a arena</strong><p>Iniciando a visualização 3D neste dispositivo.</p></div>}><ArenaCanvas /></Suspense>
       </ArenaBoundary>
       <CombatHud snapshot={snapshot} names={names} replay={replaying} />
-      {ready && <div className="combat-lobby-copy"><span>{names.player} × {names.opponent}</span><h3>Seu movimento.<br />Seu lugar no ringue.</h3><p>Calibre seu corpo e enfrente uma IA em uma melhor de três.</p></div>}
-      {replaying ? null : paused ? <div className="combat-stage-banner" role="status"><Pause size={23} aria-hidden="true" /><h3>{snapshot.pauseReason === 'manual' ? 'Combate pausado' : 'Pausa de segurança'}</h3><p>{snapshot.pauseReason ? pauseMessages[snapshot.pauseReason] : ''}</p><small>Use Retomar abaixo da arena para continuar.</small></div>
+      {armed && !replaying ? <div className="combat-stage-banner" role="status"><ShieldCheck size={26} aria-hidden="true" /><h3>Vá para a sua posição</h3><p>Fique de corpo visível na câmera e faça a guarda. A contagem de 3 s começa quando ela for reconhecida.</p>{autoResume !== null ? <><div className="combat-auto-resume" aria-hidden="true"><span style={{ transform: `scaleX(${autoResume})` }} /></div><small>Guarda reconhecida · mantenha para começar</small></> : <small>{canFight ? 'Corpo visível · levante a guarda' : 'Procurando seu corpo na câmera'}</small>}</div> : null}
+      {ready && !armed && <div className="combat-lobby-copy"><span>{names.player} × {names.opponent}</span><h3>Seu movimento.<br />Seu lugar no ringue.</h3><p>Calibre seu corpo e enfrente uma IA em uma melhor de três.</p></div>}
+      {replaying ? null : paused ? <div className="combat-stage-banner" role="status"><Pause size={23} aria-hidden="true" /><h3>{snapshot.pauseReason === 'manual' ? 'Combate pausado' : snapshot.pauseReason === 'tracking' ? 'Você saiu do quadro' : 'Pausa de segurança'}</h3><p>{snapshot.pauseReason ? pauseMessages[snapshot.pauseReason] : ''}</p>{snapshot.pauseReason === 'tracking' && autoResume !== null ? <><div className="combat-auto-resume" aria-hidden="true"><span style={{ transform: `scaleX(${autoResume})` }} /></div><small>Guarda reconhecida · mantenha para voltar</small></> : <small>{snapshot.pauseReason === 'tracking' ? 'Ou use Retomar abaixo da arena.' : 'Use Retomar abaixo da arena para continuar.'}</small>}</div>
         : snapshot.phase === 'countdown' ? <div className="combat-countdown"><span>{demo ? 'INICIANDO DEMONSTRAÇÃO' : 'PREPARE A GUARDA'}</span><strong>{Math.max(1, Math.ceil(snapshot.countdown))}</strong></div>
           : snapshot.phase === 'round-over' ? <div className="combat-stage-banner"><ShieldCheck size={26} aria-hidden="true" /><h3>{snapshot.roundWinner === 'draw' ? 'Round empatado' : `${snapshot.roundWinner ? names[snapshot.roundWinner] : ''} venceu o round`}</h3><p>Placar {snapshot.playerWins} × {snapshot.opponentWins}</p><small>{snapshot.betweenRoundsLeft > 0 ? `Próximo round em ${Math.ceil(snapshot.betweenRoundsLeft)} s` : 'Preparando o próximo round'}</small></div>
-            : finished && <div className={`combat-stage-banner is-result ${snapshot.winner === 'player' ? 'is-victory' : ''}`}><Trophy size={30} aria-hidden="true" /><span>{demo ? 'DEMONSTRAÇÃO CONCLUÍDA' : 'RESULTADO DA PARTIDA'}</span><h3>{winnerLabel(snapshot, names)}</h3><p>Placar final <strong>{snapshot.playerWins} × {snapshot.opponentWins}</strong></p>{matchRecord && <small>{matchRecord.score} pontos{rankPosition > 0 ? ` · ${rankPosition}º no ranking local` : ''}</small>}</div>}
+            : finished && !armed && <div className={`combat-stage-banner is-result ${snapshot.winner === 'player' ? 'is-victory' : ''}`}><Trophy size={30} aria-hidden="true" /><span>{demo ? 'DEMONSTRAÇÃO CONCLUÍDA' : 'RESULTADO DA PARTIDA'}</span><h3>{winnerLabel(snapshot, names)}</h3><p>Placar final <strong>{snapshot.playerWins} × {snapshot.opponentWins}</strong></p>{matchRecord && <small>{matchRecord.score} pontos{rankPosition > 0 ? ` · ${rankPosition}º no ranking local` : ''}</small>}</div>}
       {/* Visual toast only; the live region below narrates the same events once. */}
       {visibleImpact && !ready && !finished && (!paused || replaying) && <div className={`combat-impact is-${visibleImpact.result}`} aria-hidden="true">{impactLabel(visibleImpact, names)}</div>}
       {visibleCombo && !ready && !finished && (!paused || replaying) && <div className={`combat-combo ${visibleCombo.fighter === 'opponent' ? 'is-opponent' : ''}`} aria-hidden="true"><span>{names[visibleCombo.fighter]}</span><strong>{comboById(visibleCombo.combo).name}</strong><small>COMBO · +{visibleCombo.bonus} DE DANO</small></div>}
@@ -232,8 +236,9 @@ export function CombatPanel() {
 
     <div className="combat-controls">
       {replaying ? <ReplayControls playback={playback} /> : <div className="combat-match-actions">
-        {ready ? <><button className="combat-primary-action" type="button" disabled={!canFight || !sceneAvailable} onClick={command(() => matchRuntime.start('webcam'))}><Swords size={15} aria-hidden="true" />Iniciar combate</button><button className="combat-secondary-action" type="button" disabled={!sceneAvailable} onClick={command(() => matchRuntime.start('demo'))}><Play size={14} aria-hidden="true" />Assistir demonstração</button></>
-          : finished ? <><button className="combat-primary-action" type="button" disabled={!sceneAvailable || !demo && !canFight} onClick={command(() => matchRuntime.start(snapshot.mode))}><RotateCcw size={14} aria-hidden="true" />{demo ? 'Ver outra demonstração' : 'Revanche'}</button>{matchReplay && <button className="combat-secondary-action" type="button" disabled={!sceneAvailable} onClick={command(() => matchRuntime.startReplay(matchReplay))}><Film size={14} aria-hidden="true" />Ver replay</button>}<button className="combat-secondary-action" type="button" onClick={() => matchRuntime.reset()}>Voltar ao início</button></>
+        {armed ? <button className="combat-secondary-action" type="button" onClick={() => matchRuntime.disarm()}><X size={14} aria-hidden="true" />Cancelar início</button>
+          : ready ? <><button className="combat-primary-action" type="button" disabled={!canArm || !sceneAvailable} onClick={command(() => matchRuntime.arm())}><Swords size={15} aria-hidden="true" />Iniciar combate</button><button className="combat-secondary-action" type="button" disabled={!sceneAvailable} onClick={command(() => matchRuntime.start('demo'))}><Play size={14} aria-hidden="true" />Assistir demonstração</button></>
+          : finished ? <><button className="combat-primary-action" type="button" disabled={!sceneAvailable || !demo && !canArm} onClick={command(() => demo ? matchRuntime.start('demo') : matchRuntime.arm())}><RotateCcw size={14} aria-hidden="true" />{demo ? 'Ver outra demonstração' : 'Revanche'}</button>{matchReplay && <button className="combat-secondary-action" type="button" disabled={!sceneAvailable} onClick={command(() => matchRuntime.startReplay(matchReplay))}><Film size={14} aria-hidden="true" />Ver replay</button>}<button className="combat-secondary-action" type="button" onClick={() => matchRuntime.reset()}>Voltar ao início</button></>
             : <>{paused ? <button className="combat-primary-action" type="button" disabled={!resumeAvailable} aria-keyshortcuts="P" onClick={command(() => matchRuntime.resume())}><Play size={14} aria-hidden="true" />Retomar</button> : <button className="combat-secondary-action" type="button" aria-keyshortcuts="P" onClick={() => matchRuntime.pause()}><Pause size={14} aria-hidden="true" />Pausar</button>}<button className="combat-secondary-action is-subtle" type="button" onClick={() => matchRuntime.reset()}>Voltar ao início</button></>}
       </div>}
       <div className="combat-display-settings"><span className="combat-scene-fps"><Activity size={13} aria-hidden="true" /><strong>{sceneFps === null ? '—' : Math.round(sceneFps)}</strong>FPS DA ARENA</span><label className="combat-quality-label" htmlFor="combat-arena">Cenário</label><div className="combat-quality-select"><select id="combat-arena" value={playback?.meta.arena ?? arena} disabled={replaying} onChange={(event) => setArena(event.target.value as ArenaId)}>{ARENAS.map(({ id, label }) => <option key={id} value={id}>{label}</option>)}</select><ChevronDown size={13} aria-hidden="true" /></div><label className="combat-quality-label" htmlFor="combat-quality">Qualidade 3D</label><div className="combat-quality-select"><select id="combat-quality" value={quality} onChange={(event) => setQuality(event.target.value as RobotQuality)}><option value="balanced">Equilibrada</option><option value="light">Leve</option></select><ChevronDown size={13} aria-hidden="true" /></div></div>

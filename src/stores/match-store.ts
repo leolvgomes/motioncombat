@@ -21,7 +21,13 @@ interface MatchStore {
   sceneFps: number | null
   canFight: boolean
   opponentCue: OpponentCue | null
-  publish: (snapshot: CombatSnapshot, canFight: boolean, opponentCue: OpponentCue | null) => void
+  /** Progress (0–1) of the hands-free resume after the player returned to view. */
+  autoResume: number | null
+  /** A webcam start waits for the player's guard in position. */
+  armed: boolean
+  /** Camera running and calibrated, so a start can be armed before the player is framed. */
+  canArm: boolean
+  publish: (snapshot: CombatSnapshot, canFight: boolean, opponentCue: OpponentCue | null, autoResume: number | null, armed: boolean, canArm: boolean) => void
   setSceneFps: (fps: number | null) => void
 }
 
@@ -31,6 +37,9 @@ export const useMatchStore = create<MatchStore>((set) => ({
   sceneFps: null,
   canFight: false,
   opponentCue: null,
-  publish: (snapshot, canFight, opponentCue) => set({ snapshot, canFight, opponentCue }),
+  autoResume: null,
+  armed: false,
+  canArm: false,
+  publish: (snapshot, canFight, opponentCue, autoResume, armed, canArm) => set({ snapshot, canFight, opponentCue, autoResume, armed, canArm }),
   setSceneFps: (sceneFps) => set({ sceneFps }),
 }))
