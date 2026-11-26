@@ -1,5 +1,7 @@
 import type { CombatSnapshot, FighterStats, MatchWinner } from '../../types/combat'
 import type { ArenaId } from '../../types/customization'
+import { DIFFICULTY_RULES, sanitizeDifficulty, sanitizeOpponent } from '../combat/opponents'
+import type { Difficulty, OpponentId } from '../combat/opponents'
 
 /** One finished webcam match. Demonstrations are never recorded. */
 export interface MatchRecord {
@@ -8,6 +10,9 @@ export interface MatchRecord {
   readonly playedAt: number
   readonly name: string
   readonly arena: ArenaId
+  /** Records from before phase 10 were all against VULCAN-07 on normal. */
+  readonly rival: OpponentId
+  readonly difficulty: Difficulty
   readonly winner: MatchWinner
   readonly rounds: number
   readonly playerWins: number
@@ -40,19 +45,19 @@ export interface CareerSummary {
 export const MAX_RECORDS = 200
 const STAT_KEYS = ['attacks', 'hits', 'blocks', 'dodges', 'damage', 'combos', 'bestStreak'] as const
 
-/** Rewards winning first, then clean offence and active defence. Never negative. */
-export function matchScore(snapshot: Pick<CombatSnapshot, 'winner' | 'playerWins' | 'playerStats' | 'opponentStats'>): number {
+/** Rewards winning first, then clean offence and active defence. The result part follows the difficulty. Never negative. */
+export function matchScore(snapshot: Pick<CombatSnapshot, 'winner' | 'playerWins' | 'playerStats' | 'opponentStats'>, difficulty: Difficulty = 'normal'): number {
   const { playerStats: own, opponentStats: other } = snapshot
-  const result = (snapshot.winner === 'player' ? 250 : snapshot.winner === 'draw' ? 80 : 0) + snapshot.playerWins * 60
+  const result = ((snapshot.winner === 'player' ? 250 : snapshot.winner === 'draw' ? 80 : 0) + snapshot.playerWins * 60) * DIFFICULTY_RULES[difficulty].score
   const performance = own.damage + own.hits * 5 + own.blocks * 8 + own.dodges * 14 + own.combos * 20 + own.bestStreak * 5
   return Math.max(0, Math.round(result + performance - other.damage * 0.5))
 }
 
-export function createRecord(snapshot: CombatSnapshot, context: Pick<MatchRecord, 'id' | 'playedAt' | 'name' | 'arena'>): MatchRecord | null {
+export function createRecord(snapshot: CombatSnapshot, context: Pick<MatchRecord, 'id' | 'playedAt' | 'name' | 'arena' | 'rival' | 'difficulty'>): MatchRecord | null {
   if (snapshot.mode !== 'webcam' || snapshot.phase !== 'finished' || !snapshot.winner) return null
   return {
     ...context, winner: snapshot.winner, rounds: snapshot.round, playerWins: snapshot.playerWins, opponentWins: snapshot.opponentWins,
-    player: { ...snapshot.playerStats }, opponent: { ...snapshot.opponentStats }, score: matchScore(snapshot),
+    player: { ...snapshot.playerStats }, opponent: { ...snapshot.opponentStats }, score: matchScore(snapshot, context.difficulty),
   }
 }
 
@@ -143,7 +148,7 @@ export function parseRecords(
     ids.add(id)
     records.push({
       id, playedAt, name: sanitize.name(stored.name), arena: sanitize.arena(stored.arena),
-      winner, rounds, playerWins, opponentWins, player, opponent, score,
+      rival: sanitizeOpponent(stored.rival), difficulty: sanitizeDifficulty(stored.difficulty), winner, rounds, playerWins, opponentWins, player, opponent, score,
     })
   }
   return records.sort((a, b) => b.playedAt - a.playedAt).slice(0, MAX_RECORDS)

@@ -9,6 +9,8 @@ import { CombatAI } from './ai'
 import { CombatHitGeometry } from './collision'
 import { ComboTracker } from './combos'
 import { ATTACK_RULES, COMBAT_RULES, OVERDRIVE_RULES, SPECIAL_RULES } from './config'
+import { BALANCED_STYLE } from './opponents'
+import type { AIStyle } from './opponents'
 
 type MutableFrame = { -readonly [Key in keyof FighterFrame]: Key extends 'position' ? [number, number, number]
   : Key extends 'rotations' ? CombatRotations : FighterFrame[Key] }
@@ -60,6 +62,8 @@ export class CombatFighter {
   readonly saved = rotations(createCombatGuardPose())
   private readonly outcomeFrom = rotations(createCombatGuardPose())
   readonly mask = Object.fromEntries(RIG_JOINTS.map((name) => [name, 0])) as Record<RigJointName, number>
+  /** How this fighter's planner fights when the AI controls it. */
+  aiStyle: AIStyle = BALANCED_STYLE
   brain: CombatAI
   health: number = COMBAT_RULES.health
   /** 0–OVERDRIVE_RULES.max; kept between rounds, cleared with the match. */
@@ -89,7 +93,7 @@ export class CombatFighter {
     this.yawSign = id === 'player' ? 1 : -1
     this.frame = frame(createCombatGuardPose(), id === 'player' ? 0 : Math.PI)
     this.collisionFrame = frame(createCombatGuardPose(), this.frame.yaw)
-    this.brain = new CombatAI(seed)
+    this.brain = new CombatAI(seed, this.aiStyle)
     this.base = this.guard
     this.defeat.torso.multiply(this.scratch.setFromAxisAngle(X_AXIS, 0.2))
     this.defeat.head.multiply(this.scratch.setFromAxisAngle(X_AXIS, 0.2))
@@ -97,7 +101,7 @@ export class CombatFighter {
   }
 
   reset(seed: number, clearStats: boolean): void {
-    this.brain = new CombatAI(seed)
+    this.brain = new CombatAI(seed, this.aiStyle)
     this.health = COMBAT_RULES.health
     this.anchorZ = this.id === 'player' ? COMBAT_RULES.playerStartZ : COMBAT_RULES.opponentStartZ
     this.dodge = 0

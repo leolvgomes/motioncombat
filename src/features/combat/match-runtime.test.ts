@@ -5,6 +5,8 @@ import { DEFAULT_PROFILE, useProfileStore } from '../../stores/profile-store'
 import { useReplayStore } from '../../stores/replay-store'
 import { useMatchStore } from '../../stores/match-store'
 import { useRobotStore } from '../../stores/robot-store'
+import { useProgressStore } from '../../stores/progress-store'
+import { CIRCUIT, EMPTY_CIRCUIT } from '../../engine/career/circuit'
 import type { ProcessedPose } from '../../types/motion'
 import { combatMotionRuntime } from '../motion-tracking/combat-motion-runtime'
 import { publishPose } from '../motion-tracking/pose-stream'
@@ -399,5 +401,88 @@ describe('capture and match bridge', () => {
     advance(1, false)
     expect(received).toEqual([])
     unsubscribe()
+  })
+})
+
+describe('single-player content', () => {
+  beforeEach(() => {
+    useProgressStore.setState({ circuit: EMPTY_CIRCUIT, tutorialCompleted: false, persistent: true })
+  })
+
+  it('makes every demonstration a different fight', () => {
+    const fights = new Set<string>()
+    for (let index = 0; index < 4; index++) {
+      runtime.start('demo')
+      advance(12, false)
+      fights.add(`${useMatchStore.getState().rival}:${runtime.snapshot.playerHealth}:${runtime.snapshot.opponentHealth}`)
+      runtime.reset()
+    }
+    expect(fights.size).toBeGreaterThan(1)
+  })
+
+  it('fights the chosen opponent and difficulty and records both', () => {
+    useProfileStore.setState({ opponent: 'magna', difficulty: 'hard' })
+    runtime.select('quick')
+    expect(useMatchStore.getState()).toMatchObject({ rival: 'magna', difficulty: 'hard' })
+    expect(runtime.start('webcam')).toBe(true)
+    finishMatch()
+    expect(useCareerStore.getState().records[0]).toMatchObject({ rival: 'magna', difficulty: 'hard' })
+    advance(3)
+    expect(useReplayStore.getState().replays[0]!.meta).toMatchObject({ opponent: 'magna', difficulty: 'hard' })
+  })
+
+  it('starts the circuit with its first opponent and applies the result to the run', () => {
+    useProfileStore.setState({ difficulty: 'easy' })
+    runtime.select('circuit')
+    expect(useMatchStore.getState()).toMatchObject({ kind: 'circuit', rival: CIRCUIT[0] })
+    expect(runtime.start('webcam')).toBe(true)
+    expect(useProgressStore.getState().circuit.run).toMatchObject({ stage: 0, difficulty: 'easy' })
+    finishMatch()
+    const outcome = useMatchStore.getState().circuitOutcome
+    const winner = runtime.snapshot.winner
+    expect(outcome).toBe(winner === 'player' ? 'advanced' : winner === 'draw' ? 'retry' : 'eliminated')
+    expect(useCareerStore.getState().records[0]).toMatchObject({ rival: CIRCUIT[0], difficulty: 'easy' })
+  })
+
+  it('runs the guided training without a clock, career entry or replay', () => {
+    vi.spyOn(combatMotionRuntime, 'currentPosture', 'get').mockReturnValue('guard')
+    runtime.select('training')
+    expect(useMatchStore.getState().rival).toBe('sparring')
+    expect(runtime.start('webcam')).toBe(true)
+    advance(6)
+    const { training } = useMatchStore.getState()
+    expect(training?.step.id).toBe('straights')
+    expect(runtime.snapshot.secondsLeft).toBe(45)
+    runtime.skipTrainingStep()
+    expect(useMatchStore.getState().training?.index).toBe(2)
+    for (let index = 0; index < 8; index++) runtime.skipTrainingStep()
+    expect(useMatchStore.getState().training?.finished).toBe(true)
+    expect(useProgressStore.getState().tutorialCompleted).toBe(true)
+    runtime.reset()
+    expect(useMatchStore.getState().training).toBeNull()
+    expect(useCareerStore.getState().records).toEqual([])
+    expect(useReplayStore.getState().replays).toEqual([])
+  })
+
+  it('makes the training robot swing during the defence drills', () => {
+    vi.spyOn(combatMotionRuntime, 'currentPosture', 'get').mockReturnValue('guard')
+    useProfileStore.setState({ advancedAttacks: false })
+    runtime.select('training')
+    runtime.start('webcam')
+    advance(6)
+    runtime.skipTrainingStep()
+    expect(useMatchStore.getState().training?.step.id).toBe('block')
+    const attacks: string[] = []
+    const unsubscribe = runtime.subscribe((event) => { if (event.type === 'impact') attacks.push(`${event.impact.attacker}:${event.impact.result}`) })
+    advance(8)
+    unsubscribe()
+    expect(attacks).toContain('opponent:blocked')
+    expect(useMatchStore.getState().training?.step.id).toBe('dodge')
+  })
+
+  it('does not change the selection while a match runs', () => {
+    runtime.start('demo')
+    runtime.select('training')
+    expect(useMatchStore.getState().kind).toBe('quick')
   })
 })

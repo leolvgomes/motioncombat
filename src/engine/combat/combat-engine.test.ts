@@ -6,6 +6,9 @@ import type { AnimationGestureSignal } from '../../features/robot/animation-sign
 import { createCombatGuardPose } from '../animation/combat-clips'
 import { RIG_JOINTS } from '../motion/rig-controller'
 import { CombatEngine, healthWinner } from './combat-engine'
+import type { MatchSetup } from './combat-engine'
+import { COMBAT_RULES } from './config'
+import { OPPONENTS, TRAINING_STYLE } from './opponents'
 import { CombatFighter } from './fighter'
 import { CombatHitGeometry } from './collision'
 
@@ -22,9 +25,9 @@ class MatchHarness {
   } = { now: 1000, ready: true, generation: 1, pulse: null, mirrored: false, posture: 'neutral', playerBase: base() }
   private sequence = 0
 
-  constructor(seed = 0x51ee1, mode: MatchMode = 'webcam') {
+  constructor(seed = 0x51ee1, mode: MatchMode = 'webcam', setup: MatchSetup = {}) {
     this.engine = new CombatEngine(seed)
-    expect(this.engine.start(mode, this.input)).toBe(true)
+    expect(this.engine.start(mode, this.input, setup)).toBe(true)
   }
 
   tick(elapsed = 1 / 60): void {
@@ -487,5 +490,67 @@ describe('overdrive special', () => {
     }
     expect(recoil('uppercut')).toBeGreaterThan(recoil('straight'))
     expect(recoil('hook')).toBeGreaterThan(0.1)
+  })
+})
+
+describe('match setup', () => {
+  const demoTrace = (setup: MatchSetup) => {
+    const match = new MatchHarness(0x51ee1, 'demo', setup)
+    const impacts: string[] = []
+    for (let frame = 0; frame < 40 * 60; frame++) {
+      match.tick()
+      for (const event of match.engine.drainEvents()) if (event.type === 'impact') impacts.push(`${event.impact.attacker}:${event.impact.kind}:${event.impact.result}`)
+    }
+    return impacts
+  }
+
+  it('repeats a seeded demo and varies with the seed or the opponent style', () => {
+    const first = demoTrace({ seed: 11 })
+    expect(first.length).toBeGreaterThan(4)
+    expect(demoTrace({ seed: 11 })).toEqual(first)
+    expect(demoTrace({ seed: 12 })).not.toEqual(first)
+    expect(demoTrace({ seed: 11, opponentStyle: OPPONENTS.magna.ai })).not.toEqual(first)
+  })
+
+  it('keeps the original match when no setup is given', () => {
+    expect(demoTrace({})).toEqual(demoTrace({ seed: 0x51ee1 }))
+  })
+
+  it('scales only the damage the opponent deals to a webcam player', () => {
+    const takenWith = (opponentDamage: number) => {
+      const match = new MatchHarness(0x51ee1, 'webcam', { opponentDamage })
+      match.until(() => match.engine.snapshot.playerHealth < 100, 40)
+      return 100 - match.engine.snapshot.playerHealth
+    }
+    const normal = takenWith(1)
+    expect(takenWith(0.5)).toBeCloseTo(normal * 0.5, 5)
+  })
+
+  it('trains without a clock or integrity loss, and the dummy swings only on request', () => {
+    const match = new MatchHarness(0x51ee1, 'webcam', { training: true, opponentStyle: TRAINING_STYLE })
+    expect(match.engine.training).toBe(true)
+    match.advance(COMBAT_RULES.countdown + 6)
+    const { secondsLeft } = match.engine.snapshot
+    expect(secondsLeft).toBe(COMBAT_RULES.roundSeconds)
+    expect(match.engine.drainEvents().some((event) => event.type === 'attack' && event.fighter === 'opponent')).toBe(false)
+    expect(match.engine.requestAttack('straight', 'left')).toBe(true)
+    expect(match.engine.requestAttack('straight', 'right')).toBe(false)
+    match.until(() => match.engine.snapshot.lastImpact?.attacker === 'opponent', 4)
+    expect(match.engine.snapshot.playerHealth).toBe(COMBAT_RULES.health)
+    // The hit stuns the player for a moment.
+    match.advance(0.8)
+    match.fire('left')
+    match.until(() => match.engine.snapshot.lastImpact?.attacker === 'player', 3)
+    expect(match.engine.snapshot.opponentHealth).toBe(COMBAT_RULES.health)
+    match.engine.fillOverdrive()
+    expect(match.engine.snapshot.playerOverdrive).toBe(100)
+  })
+
+  it('refuses training requests outside training', () => {
+    const match = new MatchHarness()
+    match.advance(COMBAT_RULES.countdown + 0.5)
+    expect(match.engine.requestAttack('straight', 'left')).toBe(false)
+    match.engine.fillOverdrive()
+    expect(match.engine.snapshot.playerOverdrive).toBe(0)
   })
 })

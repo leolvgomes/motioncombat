@@ -10,6 +10,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { KnockoutCinematic, SmokePuffs, SpecialFlash, damageLevel, fallAmount, lightFlicker, smokeRate } from '../../engine/effects/cinematic-effects'
 import { CameraShake, ImpactParticles, ImpactPulses, impactFeedback } from '../../engine/effects/impact-effects'
 import { RIG_JOINTS } from '../../engine/motion/rig-controller'
+import { useMatchStore } from '../../stores/match-store'
 import { useProfileStore } from '../../stores/profile-store'
 import { useReplayStore } from '../../stores/replay-store'
 import { useRobotStore } from '../../stores/robot-store'
@@ -17,6 +18,7 @@ import { useSettingsStore } from '../../stores/settings-store'
 import type { FighterFrame, FighterId } from '../../types/combat'
 import type { ArenaId } from '../../types/customization'
 import { matchRuntime } from '../combat/match-runtime'
+import { RIVAL_APPEARANCES } from '../customization/catalog'
 import { FrameLimiter } from '../robot/FrameLimiter'
 import { RobotModel } from '../robot/RobotModel'
 import type { RobotRig } from '../robot/RobotModel'
@@ -156,6 +158,7 @@ const emitPoint = new Vector3()
 function ArenaFighters({ resources, feedback }: { resources: ArenaResources; feedback: ArenaFeedback }) {
   const look = useProfileStore((state) => state.look)
   const replayLook = useReplayStore((state) => state.playback?.meta.look)
+  const rival = useMatchStore((state) => state.rival)
   const player = useRef<RobotRig | null>(null)
   const opponent = useRef<RobotRig | null>(null)
   const playerMarker = useRef<Mesh>(null)
@@ -244,7 +247,7 @@ function ArenaFighters({ resources, feedback }: { resources: ArenaResources; fee
 
   return <>
     <RobotModel rigRef={player} look={replayLook ?? look} />
-    <RobotModel rigRef={opponent} variant="opponent" />
+    <RobotModel rigRef={opponent} variant="opponent" appearance={RIVAL_APPEARANCES[rival]} />
     <mesh ref={playerMarker} geometry={resources.geometries.marker} material={resources.materials.playerMarker} rotation={[-Math.PI / 2, 0, 0]} />
     <mesh ref={opponentMarker} geometry={resources.geometries.marker} material={resources.materials.opponentMarker} rotation={[-Math.PI / 2, 0, 0]} />
   </>

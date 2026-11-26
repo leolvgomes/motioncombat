@@ -2,8 +2,9 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import type { RefObject } from 'react'
 import type { BufferGeometry, Group, Material } from 'three'
 import type { HeadId, RobotLook, ShoulderId } from '../../types/customization'
-import { DEFAULT_LOOK } from '../customization/catalog'
-import { applyRobotCondition, applyRobotLook, createRobotResources } from './robot-resources'
+import { DEFAULT_LOOK, RIVAL_APPEARANCES, appearanceOfLook } from '../customization/catalog'
+import type { RobotAppearance } from '../customization/catalog'
+import { applyRobotAppearance, applyRobotCondition, createRobotResources } from './robot-resources'
 import type { RobotResources, RobotVariant } from './robot-resources'
 
 /** Local rest axes point down -Y; +Z is forward and anatomical left is +X. */
@@ -141,10 +142,16 @@ function Leg({ side, resources: { geometries: g, materials: m }, hipRef, kneeRef
 }
 
 /** A replaceable, original procedural rig. Root at floor 0; torso pivot at y=1.20. */
-export function RobotModel({ rigRef, variant = 'player', look = DEFAULT_LOOK }: { rigRef: RefObject<RobotRig | null>; variant?: RobotVariant; look?: RobotLook }) {
+/** The player variant follows `look`; the opponent variant shows `appearance` (VULCAN-07 by default). */
+export function RobotModel({ rigRef, variant = 'player', look = DEFAULT_LOOK, appearance }: {
+  rigRef: RefObject<RobotRig | null>
+  variant?: RobotVariant
+  look?: RobotLook
+  appearance?: RobotAppearance
+}) {
   const resources = useMemo(() => createRobotResources(variant), [variant])
-  useLayoutEffect(() => { if (variant === 'player') applyRobotLook(resources, look) }, [resources, variant, look])
-  const style = variant === 'player' ? look : DEFAULT_LOOK
+  const style = useMemo(() => variant === 'player' ? appearanceOfLook(look) : appearance ?? RIVAL_APPEARANCES.vulcan, [variant, look, appearance])
+  useLayoutEffect(() => applyRobotAppearance(resources, style), [resources, style])
   const { geometries: g, materials: m } = resources
   const pendingDisposals = useRef(new Map<RobotResources, ReturnType<typeof setTimeout>>())
   const root = useRef<Group>(null)

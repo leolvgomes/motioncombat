@@ -1,11 +1,19 @@
 import { createRecord } from '../../engine/career/career'
+import { circuitOpponent } from '../../engine/career/circuit'
+import type { CircuitOutcome } from '../../engine/career/circuit'
 import { CombatEngine } from '../../engine/combat/combat-engine'
+import type { MatchSetup } from '../../engine/combat/combat-engine'
+import { DIFFICULTY_RULES, OPPONENT_IDS, OPPONENTS, TRAINING_STYLE, applyDifficulty } from '../../engine/combat/opponents'
+import type { Difficulty, OpponentId, RivalId } from '../../engine/combat/opponents'
+import { GuidedTraining } from '../../engine/tutorial/tutorial'
 import { RigController } from '../../engine/motion/rig-controller'
 import { ReplayPlayer, ReplayRecorder } from '../../engine/replay/replay'
 import type { Replay, ReplaySpeed } from '../../engine/replay/replay'
 import { useCareerStore } from '../../stores/career-store'
 import { useLabStore } from '../../stores/lab-store'
 import { useMatchStore } from '../../stores/match-store'
+import type { MatchKind } from '../../stores/match-store'
+import { useProgressStore } from '../../stores/progress-store'
 import { useProfileStore } from '../../stores/profile-store'
 import { useReplayStore } from '../../stores/replay-store'
 import { useRobotStore } from '../../stores/robot-store'
@@ -17,6 +25,13 @@ import { readAnimationGeneration, readAnimationGesture } from '../robot/animatio
 
 /** How long the player must hold the guard, in view, to start an armed match or end a tracking pause hands-free. */
 export const AUTO_RESUME_MS = 1500
+
+interface MatchPlan { readonly kind: MatchKind; readonly rival: RivalId; readonly difficulty: Difficulty; readonly setup: MatchSetup }
+
+/** A different, reproducible seed for every match. */
+function matchSeed(recordedAt: number, sequence: number): number {
+  return (Math.floor(recordedAt) ^ Math.imul(sequence, 0x9e3779b1)) | 0
+}
 
 /** The only bridge between capture, UI commands, the independent match simulation and its replays. */
 export class MatchRuntime {
@@ -30,6 +45,12 @@ export class MatchRuntime {
   private epoch = 0
   private guardSince: number | null = null
   private armed = false
+  private kind: MatchKind = 'quick'
+  /** The match that was started last; null before the first one and after a reset. */
+  private plan: MatchPlan | null = null
+  private training: GuidedTraining | null = null
+  private circuitOutcome: CircuitOutcome | null = null
+  private trainingKey = ''
   private readonly listeners = new Set<(event: CombatEvent) => void>()
 
   constructor(private readonly clock: () => number = () => performance.now(), private readonly wallClock: () => number = () => Date.now()) {}
@@ -55,6 +76,14 @@ export class MatchRuntime {
     return () => { this.listeners.delete(listener) }
   }
 
+  /** Chooses what the next webcam match is. Ignored while a match runs or a start is armed. */
+  select(kind: MatchKind): void {
+    const { phase } = this.engine.snapshot
+    if (this.armed || this.player || phase !== 'ready' && phase !== 'finished') return
+    this.kind = kind
+    this.publish(this.input(0))
+  }
+
   start(mode: MatchMode): boolean {
     this.armed = false
     this.guardSince = null
@@ -62,13 +91,22 @@ export class MatchRuntime {
     // A rejected live start must not change the source or discard calibration.
     if (this.player || mode === 'webcam' && !input.ready) { this.publish(input); return false }
     this.saveRecording()
-    const started = this.engine.start(mode, input)
+    const recordedAt = this.wallClock()
+    const sequence = this.matchSequence + 1
+    const plan = this.planMatch(mode, matchSeed(recordedAt, sequence))
+    const started = this.engine.start(mode, input, plan.setup)
     if (started) {
       if (mode === 'demo') useRobotStore.getState().setMode('demo')
-      const { name, look, arena } = useProfileStore.getState()
-      const recordedAt = this.wallClock()
-      this.matchId = `${recordedAt.toString(36)}-${(++this.matchSequence).toString(36)}`
-      this.recorder.begin({ id: this.matchId, recordedAt, mode, name: sanitizeName(name), look, arena })
+      const { name, look, arena, advancedAttacks } = useProfileStore.getState()
+      this.matchSequence = sequence
+      this.matchId = `${recordedAt.toString(36)}-${sequence.toString(36)}`
+      this.plan = plan
+      this.circuitOutcome = null
+      this.training = plan.kind === 'training' ? new GuidedTraining(advancedAttacks) : null
+      this.trainingKey = ''
+      // Training is practice, never a replay or a career entry.
+      if (plan.rival === 'sparring') this.recorder.discard()
+      else this.recorder.begin({ id: this.matchId, recordedAt, mode, name: sanitizeName(name), look, arena, opponent: plan.rival, difficulty: plan.difficulty })
     }
     this.publish(this.input(0))
     this.dispatch(this.engine.drainEvents())
@@ -108,6 +146,9 @@ export class MatchRuntime {
     this.armed = false
     this.guardSince = null
     this.saveRecording()
+    this.plan = null
+    this.training = null
+    this.circuitOutcome = null
     this.engine.reset()
     this.publish(this.input(0))
   }
@@ -175,6 +216,7 @@ export class MatchRuntime {
       this.engine.step(input, elapsed)
       this.autoResume(input)
       events = this.engine.drainEvents()
+      this.coach(input, elapsed, events)
       this.record(elapsed, events)
     }
     const snapshot = this.snapshot
@@ -184,8 +226,84 @@ export class MatchRuntime {
       || previous.opponentCue?.side !== this.opponentCue?.side || previous.opponentCue?.kind !== this.opponentCue?.kind
       || previous.snapshot.playerHealth !== snapshot.playerHealth || previous.snapshot.opponentHealth !== snapshot.opponentHealth
       || (previous.autoResume === null) !== (this.guardSince === null) || previous.armed !== this.armed || previous.canArm !== this.armable()
-      || previous.snapshot.lastImpact?.id !== snapshot.lastImpact?.id || previous.snapshot.lastCombo?.id !== snapshot.lastCombo?.id) this.publish(input)
+      || previous.snapshot.lastImpact?.id !== snapshot.lastImpact?.id || previous.snapshot.lastCombo?.id !== snapshot.lastCombo?.id
+      || this.trainingChanged()) this.publish(input)
     this.dispatch(events)
+  }
+
+  /** What the next match is, from the current selection and saved progress. Demonstrations pick their own. */
+  private planMatch(mode: MatchMode, seed: number): MatchPlan {
+    if (mode === 'demo') {
+      // Every demonstration is a different fight: another seed, another opponent and another style for the left robot.
+      const rival = OPPONENT_IDS[(seed >>> 3) % OPPONENT_IDS.length]!
+      const style = OPPONENT_IDS[(seed >>> 7) % OPPONENT_IDS.length]!
+      return { kind: 'quick', rival, difficulty: 'normal', setup: { seed, opponentStyle: OPPONENTS[rival].ai, playerStyle: OPPONENTS[style].ai } }
+    }
+    if (this.kind === 'training') return { kind: 'training', rival: 'sparring', difficulty: 'normal', setup: { seed, training: true, opponentStyle: TRAINING_STYLE } }
+    const profile = useProfileStore.getState()
+    let rival: OpponentId = profile.opponent
+    let difficulty = profile.difficulty
+    if (this.kind === 'circuit') {
+      if (!useProgressStore.getState().circuit.run) useProgressStore.getState().startCircuit(profile.difficulty, this.wallClock())
+      const run = useProgressStore.getState().circuit.run!
+      rival = circuitOpponent(run)
+      difficulty = run.difficulty
+    }
+    return {
+      kind: this.kind, rival, difficulty,
+      setup: { seed, opponentStyle: applyDifficulty(OPPONENTS[rival].ai, difficulty), opponentDamage: DIFFICULTY_RULES[difficulty].damage },
+    }
+  }
+
+  /** The robot in the opposite corner, as the arena and the HUD should show it. */
+  private rival(): RivalId {
+    if (this.player) return this.player.replay.meta.opponent
+    if (this.plan && this.engine.snapshot.phase !== 'ready') return this.plan.rival
+    if (this.kind === 'training') return 'sparring'
+    if (this.kind === 'circuit') {
+      const { run } = useProgressStore.getState().circuit
+      return run ? circuitOpponent(run) : 'kestrel'
+    }
+    return useProfileStore.getState().opponent
+  }
+
+  private difficulty(): Difficulty {
+    if (this.player) return this.player.replay.meta.difficulty
+    if (this.plan && this.engine.snapshot.phase !== 'ready') return this.plan.difficulty
+    if (this.kind === 'circuit') return useProgressStore.getState().circuit.run?.difficulty ?? useProfileStore.getState().difficulty
+    return useProfileStore.getState().difficulty
+  }
+
+  /** Feeds the guided training with the real events of the session and lets it drive the training robot. */
+  private coach(input: CombatInput, elapsed: number, events: readonly CombatEvent[]): void {
+    const training = this.training
+    if (!training || !this.engine.training) return
+    for (const event of events) training.observe(event)
+    const { phase, pauseReason } = this.engine.snapshot
+    if (phase !== 'fighting' || pauseReason) return
+    const wasFinished = training.finished
+    training.step(elapsed, input.posture === 'guard')
+    const drill = training.wantsAttack
+    if (drill && this.engine.requestAttack(drill.kind, drill.side)) training.drillStarted()
+    if (training.wantsOverdrive && this.engine.snapshot.playerOverdrive < 100) this.engine.fillOverdrive()
+    if (!wasFinished && training.finished) useProgressStore.getState().completeTutorial()
+  }
+
+  /** Skips the current guided-training step. */
+  skipTrainingStep(): void {
+    if (!this.training || !this.engine.training) return
+    const wasFinished = this.training.finished
+    this.training.skip()
+    if (!wasFinished && this.training.finished) useProgressStore.getState().completeTutorial()
+    this.publish(this.input(0))
+  }
+
+  private trainingChanged(): boolean {
+    const view = this.training?.view
+    const key = view ? `${view.index}:${view.count}:${view.completed}:${view.finished}:${view.note}` : ''
+    if (key === this.trainingKey) return false
+    this.trainingKey = key
+    return true
   }
 
   /**
@@ -223,10 +341,13 @@ export class MatchRuntime {
 
   private record(elapsed: number, events: readonly CombatEvent[]): void {
     this.recorder.capture(elapsed, this.engine.snapshot, this.engine.fighters, events)
-    if (events.some(({ type }) => type === 'match-end')) {
+    const plan = this.plan
+    if (plan && plan.rival !== 'sparring' && events.some(({ type }) => type === 'match-end')) {
       const { name, arena } = useProfileStore.getState()
-      const result = createRecord(this.engine.snapshot, { id: this.matchId, playedAt: this.wallClock(), name: sanitizeName(name), arena })
+      const snapshot = this.engine.snapshot
+      const result = createRecord(snapshot, { id: this.matchId, playedAt: this.wallClock(), name: sanitizeName(name), arena, rival: plan.rival, difficulty: plan.difficulty })
       if (result) useCareerStore.getState().add(result)
+      if (plan.kind === 'circuit' && snapshot.mode === 'webcam' && snapshot.winner) this.circuitOutcome = useProgressStore.getState().recordCircuit(snapshot.winner)
     }
     if (this.recorder.complete) this.saveRecording()
   }
@@ -269,7 +390,11 @@ export class MatchRuntime {
       playerStats: { ...snapshot.playerStats }, opponentStats: { ...snapshot.opponentStats },
       lastImpact: snapshot.lastImpact ? { ...snapshot.lastImpact } : null,
       lastCombo: snapshot.lastCombo ? { ...snapshot.lastCombo } : null,
-    }, input.ready, this.opponentCue, this.autoResumeProgress, this.armed, this.armable())
+    }, {
+      canFight: input.ready, opponentCue: this.opponentCue, autoResume: this.autoResumeProgress, armed: this.armed, canArm: this.armable(),
+      kind: this.kind, rival: this.rival(), difficulty: this.difficulty(),
+      training: this.player || !this.engine.training ? null : this.training?.view ?? null, circuitOutcome: this.player ? null : this.circuitOutcome,
+    })
     const { player } = this
     if (player || useReplayStore.getState().playback) {
       useReplayStore.getState().setPlayback(player ? {

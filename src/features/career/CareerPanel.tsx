@@ -9,7 +9,8 @@ import { useCareerStore } from '../../stores/career-store'
 import { useMatchStore } from '../../stores/match-store'
 import { useReplayStore } from '../../stores/replay-store'
 import type { MatchWinner } from '../../types/combat'
-import { arenaOption, OPPONENT_NAME } from '../customization/catalog'
+import { DIFFICULTY_RULES, rivalName } from '../../engine/combat/opponents'
+import { arenaOption } from '../customization/catalog'
 
 const dateFormat = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
 const stepNames = { straight: 'Soco', hook: 'Cruzado', uppercut: 'Uppercut' } as const
@@ -26,9 +27,9 @@ function duration(seconds: number): string {
 function Ranking({ records }: { records: readonly MatchRecord[] }) {
   return <div className="career-table"><table>
     <caption>Ranking local · 10 melhores partidas</caption>
-    <thead><tr><th scope="col">Posição</th><th scope="col">Robô</th><th scope="col">Resultado</th><th scope="col">Rounds</th><th scope="col">Combos</th><th scope="col">Data</th><th scope="col">Pontos</th></tr></thead>
+    <thead><tr><th scope="col">Posição</th><th scope="col">Robô</th><th scope="col">Adversário</th><th scope="col">Resultado</th><th scope="col">Rounds</th><th scope="col">Combos</th><th scope="col">Data</th><th scope="col">Pontos</th></tr></thead>
     <tbody>{rankRecords(records).map((record, index) => <tr key={record.id} className={index === 0 ? 'is-first' : ''}>
-      <th scope="row">{index + 1}º</th><td>{record.name}</td><td>{resultLabel(record.winner)}</td><td>{record.playerWins} × {record.opponentWins}</td>
+      <th scope="row">{index + 1}º</th><td>{record.name}</td><td>{rivalName(record.rival)}<small>{DIFFICULTY_RULES[record.difficulty].label}</small></td><td>{resultLabel(record.winner)}</td><td>{record.playerWins} × {record.opponentWins}</td>
       <td>{record.player.combos}</td><td>{dateFormat.format(record.playedAt)}</td><td><strong>{record.score}</strong></td>
     </tr>)}</tbody>
   </table></div>
@@ -74,7 +75,7 @@ export function CareerPanel({ onWatch }: { onWatch: (replay: Replay) => void }) 
       <p className="expansion-note">As 3 últimas partidas, guardadas como movimentos dos robôs. Não há imagem da câmera nem pontos do seu corpo. Demonstrações saem primeiro quando falta espaço.</p>
       {replays.length === 0 ? <p className="expansion-empty">Nenhum replay ainda. Ele aparece aqui quando uma partida termina.</p>
         : <ul className="replay-list">{replays.map((replay) => <li key={replay.meta.id}>
-          <div><strong>{replay.meta.name} × {OPPONENT_NAME}</strong><small>{replay.meta.mode === 'demo' ? 'Demonstração' : resultLabel(replay.winner)} · {arenaOption(replay.meta.arena).label} · {duration(replay.duration)} · {dateFormat.format(replay.meta.recordedAt)}</small></div>
+          <div><strong>{replay.meta.name} × {rivalName(replay.meta.opponent)}</strong><small>{replay.meta.mode === 'demo' ? 'Demonstração' : resultLabel(replay.winner)} · {arenaOption(replay.meta.arena).label} · {duration(replay.duration)} · {dateFormat.format(replay.meta.recordedAt)}</small></div>
           <button className="combat-secondary-action" type="button" disabled={busy} onClick={() => onWatch(replay)}><Play size={13} aria-hidden="true" />Assistir</button>
           <button className="combat-secondary-action is-subtle" type="button" aria-label={`Excluir replay de ${dateFormat.format(replay.meta.recordedAt)}`} onClick={() => remove(replay.meta.id)}><Trash2 size={14} aria-hidden="true" /></button>
         </li>)}</ul>}

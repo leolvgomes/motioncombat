@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { CombatAI } from './ai'
 import type { AIDecision } from './ai'
 import { COMBAT_RULES } from './config'
+import { BALANCED_STYLE, DIFFICULTIES, MIN_WIND_UP, OPPONENTS, OPPONENT_IDS, TRAINING_STYLE, applyDifficulty, opponentProfile, sanitizeDifficulty, sanitizeOpponent } from './opponents'
+import type { AIStyle } from './opponents'
 
 const CLOSE = COMBAT_RULES.preferredDistance
 const SEED = 0x12345678
@@ -22,8 +24,8 @@ function attack(ai: CombatAI): AIDecision {
   throw new Error('The seeded planner did not attack within ten seconds.')
 }
 
-function trace(seed: number): AIDecision[] {
-  const ai = new CombatAI(seed)
+function trace(seed: number, style: AIStyle = BALANCED_STYLE): AIDecision[] {
+  const ai = new CombatAI(seed, style)
   const decisions: AIDecision[] = []
   const dt = 1 / 60
   let attackingFor = 0
@@ -109,5 +111,56 @@ describe('CombatAI', () => {
     attack(attacking)
     attacking.react()
     expect(attacking.step(CLOSE, true, 0.01)).toMatchObject({ action: 'idle', movement: 0, attack: null })
+  })
+})
+
+describe('opponent styles and difficulty', () => {
+  const attacks = (style: AIStyle) => trace(SEED, style).filter((decision) => decision.attack)
+
+  it('gives each opponent its own rhythm and attack mix', () => {
+    const counts = Object.fromEntries(OPPONENT_IDS.map((id) => [id, attacks(OPPONENTS[id].ai).length]))
+    expect(counts.magna).toBeGreaterThan(counts.basalt!)
+    const kinds = (id: keyof typeof OPPONENTS) => attacks(OPPONENTS[id].ai).map(({ attackKind }) => attackKind)
+    const share = (list: string[], kind: string) => list.filter((value) => value === kind).length / list.length
+    expect(share(kinds('kestrel'), 'straight')).toBeGreaterThan(share(kinds('basalt'), 'straight'))
+    const guarding = (id: keyof typeof OPPONENTS) => trace(SEED, OPPONENTS[id].ai).filter(({ action }) => action === 'guard').length
+    expect(guarding('basalt')).toBeGreaterThan(guarding('magna'))
+  })
+
+  it('stretches wind-ups on easy, shortens them on hard and never below the readable floor', () => {
+    const easy = applyDifficulty(BALANCED_STYLE, 'easy')
+    const hard = applyDifficulty(BALANCED_STYLE, 'hard')
+    expect(applyDifficulty(BALANCED_STYLE, 'normal')).toBe(BALANCED_STYLE)
+    expect(easy.windUp).toBeGreaterThan(BALANCED_STYLE.windUp)
+    expect(hard.windUp).toBeLessThan(BALANCED_STYLE.windUp)
+    for (const id of OPPONENT_IDS) for (const difficulty of DIFFICULTIES) {
+      const style = applyDifficulty(OPPONENTS[id].ai, difficulty)
+      expect(style.windUp).toBeGreaterThanOrEqual(MIN_WIND_UP)
+      expect(style.followUpWindUp).toBeGreaterThanOrEqual(MIN_WIND_UP)
+    }
+    expect(attacks(easy).length).toBeLessThan(attacks(hard).length)
+  })
+
+  it('keeps a training dummy idle until asked, then winds up the requested attack', () => {
+    const ai = new CombatAI(SEED, TRAINING_STYLE)
+    for (let frame = 0; frame < 600; frame++) expect(ai.step(CLOSE, false, 1 / 60).attack).toBeNull()
+    expect(ai.request('uppercut', 'right', CLOSE + 1)).toBe(false)
+    expect(ai.request('uppercut', 'right', CLOSE)).toBe(true)
+    expect(ai.request('straight', 'left', CLOSE)).toBe(false)
+    let elapsed = 0
+    let decision = ai.step(CLOSE, false, 0)
+    while (!decision.attack && elapsed < 3) { elapsed += 0.01; decision = ai.step(CLOSE, false, 0.01) }
+    expect(decision).toMatchObject({ attack: 'right', attackKind: 'uppercut' })
+    expect(elapsed).toBeGreaterThanOrEqual(TRAINING_STYLE.windUp)
+    ai.react(true)
+    for (let frame = 0; frame < 600; frame++) expect(ai.step(CLOSE, false, 1 / 60)).toMatchObject({ attack: null, blocking: false })
+  })
+
+  it('reads unknown stored values as the defaults', () => {
+    expect(sanitizeOpponent('magna')).toBe('magna')
+    expect(sanitizeOpponent('nope')).toBe('vulcan')
+    expect(sanitizeDifficulty('hard')).toBe('hard')
+    expect(sanitizeDifficulty(3)).toBe('normal')
+    expect(opponentProfile('basalt').name).toBe('BASALTO-9')
   })
 })

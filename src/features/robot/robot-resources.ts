@@ -1,6 +1,7 @@
 import { BoxGeometry, Color, CylinderGeometry, ExtrudeGeometry, MeshStandardMaterial, Shape, SphereGeometry, TorusGeometry } from 'three'
 import type { RobotLook } from '../../types/customization'
-import { armorOption, lightOption } from '../customization/catalog'
+import { appearanceOfLook } from '../customization/catalog'
+import type { RobotAppearance } from '../customization/catalog'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 
 export type RobotVariant = 'player' | 'opponent'
@@ -61,17 +62,17 @@ export function createRobotResources(variant: RobotVariant = 'player') {
   }
 }
 
-/** Recolours existing materials, so changing a look never rebuilds geometry. The opponent keeps its own identity. */
-export function applyRobotLook({ materials, base }: RobotResources, look: RobotLook): void {
-  const armor = armorOption(look.armor)
-  const light = lightOption(look.light)
-  materials.silver.color.set(armor.plate)
-  materials.slate.color.set(armor.frame)
+/** Recolours existing materials, so changing a look or an opponent never rebuilds geometry. */
+export function applyRobotAppearance({ materials, base }: RobotResources, appearance: RobotAppearance): void {
+  materials.silver.color.set(appearance.plate)
+  materials.slate.color.set(appearance.frame)
   base.silver.copy(materials.silver.color)
   base.slate.copy(materials.slate.color)
-  materials.cyan.color.set(light.color)
-  materials.cyan.emissive.set(light.emissive)
+  materials.cyan.color.set(appearance.light)
+  materials.cyan.emissive.set(appearance.emissive)
 }
+
+export function applyRobotLook(resources: RobotResources, look: RobotLook): void { applyRobotAppearance(resources, appearanceOfLook(look)) }
 
 const SCORCH = new Color('#1d1814')
 

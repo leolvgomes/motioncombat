@@ -14,14 +14,16 @@ const finished = (overrides: Partial<CombatSnapshot> = {}): CombatSnapshot => ({
   ...READY_MATCH, phase: 'finished', winner: 'player', round: 2, playerWins: 2, opponentWins: 0, playerStats: stats(), opponentStats: stats({ damage: 40 }), ...overrides,
 })
 const record = (id: string, playedAt: number, winner: MatchWinner = 'player', score = 100): MatchRecord => ({
-  id, playedAt, name: 'ATLAS-01', arena: 'foundry', winner, rounds: 2, playerWins: 2, opponentWins: 0, player: stats(), opponent: stats({ damage: 40 }), score,
+  id, playedAt, name: 'ATLAS-01', arena: 'foundry', rival: 'vulcan', difficulty: 'normal', winner, rounds: 2, playerWins: 2, opponentWins: 0, player: stats(), opponent: stats({ damage: 40 }), score,
 })
 const sanitize = { name: sanitizeName, arena: sanitizeArena }
 
 describe('career records', () => {
   it('records only finished webcam matches', () => {
-    const context = { id: 'a', playedAt: 5, name: 'ATLAS-01', arena: 'foundry' as const }
-    expect(createRecord(finished(), context)).toMatchObject({ id: 'a', winner: 'player', rounds: 2, score: matchScore(finished()) })
+    const context = { id: 'a', playedAt: 5, name: 'ATLAS-01', arena: 'foundry' as const, rival: 'magna' as const, difficulty: 'normal' as const }
+    expect(createRecord(finished(), context)).toMatchObject({ id: 'a', rival: 'magna', winner: 'player', rounds: 2, score: matchScore(finished()) })
+    expect(createRecord(finished(), { ...context, difficulty: 'hard' })!.score).toBeGreaterThan(createRecord(finished(), context)!.score)
+    expect(createRecord(finished(), { ...context, difficulty: 'easy' })!.score).toBeLessThan(createRecord(finished(), context)!.score)
     expect(createRecord(finished({ mode: 'demo' }), context)).toBeNull()
     expect(createRecord(finished({ phase: 'fighting' }), context)).toBeNull()
     expect(createRecord(finished({ winner: null }), context)).toBeNull()
@@ -63,6 +65,12 @@ describe('career records', () => {
     expect(parseRecords(raw, sanitize)).toEqual([good, { ...good, id: 'w', name: 'I', arena: 'foundry' }])
     for (const invalid of [null, 'nope', '{}', '3']) expect(parseRecords(invalid, sanitize)).toEqual([])
   })
+
+  it('reads records saved before opponents and difficulty existed as VULCAN-07 on normal', () => {
+    const { rival: _rival, difficulty: _difficulty, ...legacy } = record('old', 10)
+    expect(parseRecords(JSON.stringify([legacy]), sanitize)[0]).toMatchObject({ rival: 'vulcan', difficulty: 'normal' })
+    expect(parseRecords(JSON.stringify([{ ...legacy, rival: 'kestrel', difficulty: 'easy' }]), sanitize)[0]).toMatchObject({ rival: 'kestrel', difficulty: 'easy' })
+  })
 })
 
 describe('career and profile stores', () => {
@@ -100,8 +108,10 @@ describe('career and profile stores', () => {
     useProfileStore.getState().setLook({ armor: 'crimson' })
     useProfileStore.getState().setArena('canyon')
     useProfileStore.getState().setAdvancedAttacks(false)
+    useProfileStore.getState().setOpponent('magna')
+    useProfileStore.getState().setDifficulty('hard')
     expect(parseProfile(stored.get(PROFILE_STORAGE_KEY) ?? null)).toEqual({
-      name: 'TROVÃO', look: { ...DEFAULT_LOOK, armor: 'crimson' }, arena: 'canyon', advancedAttacks: false,
+      name: 'TROVÃO', look: { ...DEFAULT_LOOK, armor: 'crimson' }, arena: 'canyon', advancedAttacks: false, opponent: 'magna', difficulty: 'hard',
     })
     useProfileStore.getState().restoreRobot()
     expect(useProfileStore.getState()).toMatchObject({ name: DEFAULT_NAME, look: DEFAULT_LOOK, arena: 'canyon' })

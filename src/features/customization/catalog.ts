@@ -1,3 +1,4 @@
+import type { RivalId } from '../../engine/combat/opponents'
 import type { ArenaId, ArmorId, HeadId, LightId, RobotLook, ShoulderId } from '../../types/customization'
 
 interface Option<Id extends string> { readonly id: Id; readonly label: string }
@@ -41,6 +42,30 @@ export const DEFAULT_LOOK: RobotLook = Object.freeze({ armor: 'titanium', light:
 export const DEFAULT_ARENA: ArenaId = 'foundry'
 export const DEFAULT_NAME = 'ATLAS-01'
 export const OPPONENT_NAME = 'VULCAN-07'
+
+/** Final colours and parts of a robot. Player looks map onto it; each opponent has its own. */
+export interface RobotAppearance {
+  readonly plate: string
+  readonly frame: string
+  readonly light: string
+  readonly emissive: string
+  readonly head: HeadId
+  readonly shoulders: ShoulderId
+}
+
+export const RIVAL_APPEARANCES: Readonly<Record<RivalId, RobotAppearance>> = Object.freeze({
+  vulcan: Object.freeze({ plate: '#af7955', frame: '#493c37', light: '#ffb76b', emissive: '#e57c30', head: 'visor', shoulders: 'standard' }),
+  kestrel: Object.freeze({ plate: '#d3dce3', frame: '#3a4b5c', light: '#b7ea5f', emissive: '#7fc522', head: 'twin', shoulders: 'light' }),
+  basalt: Object.freeze({ plate: '#6b7378', frame: '#24292d', light: '#ffd06b', emissive: '#e0a020', head: 'visor', shoulders: 'heavy' }),
+  magna: Object.freeze({ plate: '#a8434c', frame: '#3d2228', light: '#f27fc4', emissive: '#d23a98', head: 'crest', shoulders: 'standard' }),
+  sparring: Object.freeze({ plate: '#8d99a3', frame: '#3b444c', light: '#eef6ff', emissive: '#a9c6dd', head: 'twin', shoulders: 'heavy' }),
+})
+
+export function appearanceOfLook(look: RobotLook): RobotAppearance {
+  const armor = armorOption(look.armor)
+  const light = lightOption(look.light)
+  return { plate: armor.plate, frame: armor.frame, light: light.color, emissive: light.emissive, head: look.head, shoulders: look.shoulders }
+}
 export const NAME_MAX_LENGTH = 12
 
 function known<Id extends string>(options: readonly Option<Id>[], value: unknown, fallback: Id): Id {

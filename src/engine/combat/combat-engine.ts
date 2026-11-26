@@ -5,6 +5,21 @@ import type { CombatEvent, CombatInput, CombatSnapshot, FighterFrame, FighterId,
 import { CombatFighter } from './fighter'
 import { CombatHitGeometry } from './collision'
 import { ATTACK_RULES, COMBAT_RULES, OVERDRIVE_RULES, SPECIAL_RULES } from './config'
+import { BALANCED_STYLE } from './opponents'
+import type { AIStyle } from './opponents'
+
+/** Everything that may differ between two matches. Omitted fields keep the original VULCAN-07 match. */
+export interface MatchSetup {
+  /** Seeds both planners: the same seed and the same inputs repeat the same match. */
+  readonly seed?: number
+  readonly opponentStyle?: AIStyle
+  /** Planner of the player's robot in a demonstration. */
+  readonly playerStyle?: AIStyle
+  /** Multiplies the damage the opponent deals to a webcam player. */
+  readonly opponentDamage?: number
+  /** Guided training: no clock, no integrity loss and no round end; the opponent attacks only on request. */
+  readonly training?: boolean
+}
 
 type MutableSnapshot = { -readonly [Key in keyof CombatSnapshot]: CombatSnapshot[Key] }
 interface Resolution { result: ImpactEvent['result']; pending: boolean; kind: AttackKind; side: AttackSide; special: boolean; readonly position: Vector3 }
@@ -18,7 +33,10 @@ export function healthWinner(player: number, opponent: number): MatchWinner {
 
 /** Pure fixed-step match simulation. Rendering and React only read its cached outputs. */
 export class CombatEngine {
-  private readonly seed: number
+  private readonly defaultSeed: number
+  private seed: number
+  private opponentDamage = 1
+  private trainingMatch = false
   private readonly player: CombatFighter
   private readonly opponent: CombatFighter
   private readonly frameRecord: Record<FighterId, FighterFrame>
@@ -37,7 +55,8 @@ export class CombatEngine {
   private comboSequence = 0
 
   constructor(seed = 0x51ee1) {
-    this.seed = Number.isFinite(seed) ? seed | 0 : 0x51ee1
+    this.defaultSeed = Number.isFinite(seed) ? seed | 0 : 0x51ee1
+    this.seed = this.defaultSeed
     this.player = new CombatFighter('player', this.seed ^ 0x29c3)
     this.opponent = new CombatFighter('opponent', this.seed ^ 0x56f1)
     this.frameRecord = { player: this.player.frame, opponent: this.opponent.frame }
@@ -52,13 +71,21 @@ export class CombatEngine {
 
   get snapshot(): CombatSnapshot { return this.state }
   get fighters(): Record<FighterId, FighterFrame> { return this.frameRecord }
+  /** The running match is a guided training session. */
+  get training(): boolean { return this.trainingMatch && this.state.phase !== 'ready' }
 
   /** Hands presentation events to one consumer, oldest first. Rules never read them back. */
   drainEvents(): CombatEvent[] { return this.events.splice(0) }
 
-  start(mode: MatchMode, input: CombatInput): boolean {
+  start(mode: MatchMode, input: CombatInput, setup: MatchSetup = {}): boolean {
     if (this.state.phase !== 'ready' && this.state.phase !== 'finished' || !Number.isFinite(input.now)
       || mode === 'webcam' && !this.validSource(input)) return false
+    this.seed = setup.seed !== undefined && Number.isFinite(setup.seed) ? setup.seed | 0 : this.defaultSeed
+    this.player.aiStyle = setup.playerStyle ?? BALANCED_STYLE
+    this.opponent.aiStyle = setup.opponentStyle ?? BALANCED_STYLE
+    const damage = setup.opponentDamage ?? 1
+    this.opponentDamage = Number.isFinite(damage) ? Math.max(0, Math.min(2, damage)) : 1
+    this.trainingMatch = mode === 'webcam' && setup.training === true
     this.reset()
     this.state.mode = mode
     this.state.phase = 'countdown'
@@ -117,6 +144,24 @@ export class CombatEngine {
     this.blockCurrentSignals(input)
     this.setBases(input)
     return true
+  }
+
+  /**
+   * Training only: asks the opponent to wind up an attack the player can read and defend.
+   * False outside training, while either robot is busy or before the opponent is in range.
+   */
+  requestAttack(kind: AttackKind, side: AttackSide): boolean {
+    if (!this.trainingMatch || this.state.phase !== 'fighting' || this.state.pauseReason) return false
+    const fighter = this.opponent
+    if (fighter.attack || fighter.stun > 0 || fighter.returning > 0) return false
+    return fighter.brain.request(kind, side, Math.abs(fighter.anchorZ - this.player.anchorZ))
+  }
+
+  /** Training only: fills the player's overdrive meter so the special can be practised. */
+  fillOverdrive(): void {
+    if (!this.trainingMatch || this.state.phase !== 'fighting') return
+    this.player.gainOverdrive(OVERDRIVE_RULES.max)
+    this.syncStreaks()
   }
 
   reset(): void {
@@ -227,7 +272,7 @@ export class CombatEngine {
     if (this.opponentResolution.pending && this.opponentResolution.result === 'hit') this.player.combo.break()
     this.applyResolution(this.player, this.opponent, this.playerResolution)
     this.applyResolution(this.opponent, this.player, this.opponentResolution)
-    this.state.secondsLeft = Math.max(0, this.state.secondsLeft - dt)
+    if (!this.trainingMatch) this.state.secondsLeft = Math.max(0, this.state.secondsLeft - dt)
     this.state.playerHealth = this.player.health
     this.state.opponentHealth = this.opponent.health
     this.syncStreaks()
@@ -316,7 +361,10 @@ export class CombatEngine {
     const combo = result === 'hit' ? attacker.combo.land(resolution) : null
     let damage = 0
     if (result === 'hit' || result === 'blocked') {
-      damage = defender.takeDamage(result === 'blocked' ? rules.blockedDamage : rules.damage + (combo?.bonus ?? 0), resolution.kind, resolution.side)
+      const scale = attacker.id === 'opponent' && this.state.mode === 'webcam' ? this.opponentDamage : 1
+      damage = defender.takeDamage((result === 'blocked' ? rules.blockedDamage : rules.damage + (combo?.bonus ?? 0)) * scale, resolution.kind, resolution.side)
+      // Training shows every contact but never wears either robot down.
+      if (this.trainingMatch) defender.health = COMBAT_RULES.health
       // Spending the meter never refills it on the same blow.
       if (!resolution.special) attacker.gainOverdrive(damage * (result === 'hit' ? OVERDRIVE_RULES.perHitDamage : OVERDRIVE_RULES.perBlockedDamage))
       defender.gainOverdrive(damage * OVERDRIVE_RULES.perDamageTaken)

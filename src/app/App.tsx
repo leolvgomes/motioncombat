@@ -21,7 +21,7 @@ import { matchRuntime } from '../features/combat/match-runtime'
 type View = 'arena' | 'lab' | 'garage' | 'career'
 
 const views: readonly { id: View; label: string; tag: string; Icon: LucideIcon; section: string; title: string; description: string }[] = [
-  { id: 'arena', label: 'Arena', tag: 'COMBATE', Icon: Swords, section: 'COMBAT ARENA', title: 'Seu lugar no ringue', description: 'O combate começa com você. Sincronize, assuma a guarda e enfrente VULCAN-07.' },
+  { id: 'arena', label: 'Arena', tag: 'COMBATE', Icon: Swords, section: 'COMBAT ARENA', title: 'Seu lugar no ringue', description: 'O combate começa com você. Treine, escolha um adversário ou encare o circuito.' },
   { id: 'lab', label: 'Laboratório', tag: 'MOVIMENTO', Icon: Bot, section: 'MOTION LAB', title: 'Laboratório de movimento', description: 'Explore o espelhamento, a calibração e as animações de cada golpe.' },
   { id: 'garage', label: 'Garagem', tag: 'ROBÔ', Icon: Wrench, section: 'GARAGE', title: 'Monte sua identidade', description: 'Escolha nome, blindagem, luzes e o cenário da próxima luta.' },
   { id: 'career', label: 'Carreira', tag: 'REPLAYS', Icon: Trophy, section: 'CAREER', title: 'Sua história no ringue', description: 'Acompanhe estatísticas, ranking local, combos e replays.' },
@@ -30,7 +30,7 @@ const views: readonly { id: View; label: string; tag: string; Icon: LucideIcon; 
 const guideSteps = [
   { number: '01', Icon: Camera, title: 'Conecte e calibre', description: 'Para controlar seu robô, ative a webcam e calibre sua postura neutra e a guarda.' },
   { number: '02', Icon: Focus, title: 'Assuma sua guarda', description: 'Mantenha braços e tronco visíveis. Faça um soco de cada vez e retorne à guarda.' },
-  { number: '03', Icon: MoveUpRight, title: 'Entre no ringue', description: 'Inicie o combate com seus movimentos. Sem webcam, assista à demonstração entre duas IAs.' },
+  { number: '03', Icon: MoveUpRight, title: 'Entre no ringue', description: 'Comece pelo treino guiado, depois escolha uma luta rápida ou o circuito. Sem webcam, assista à demonstração entre duas IAs.' },
 ]
 
 function Laboratory() {
@@ -72,13 +72,13 @@ function Laboratory() {
           <button className={`rail-item ${view === 'career' ? 'is-current' : ''}`} type="button" onClick={() => selectView('career')} aria-current={view === 'career' ? 'page' : undefined} title="Abrir carreira e replays"><Trophy size={20} /><span className="sr-only">Abrir carreira e replays</span></button>
         </nav>
         <a className="rail-item rail-help" href="#guia" title="Guia de início"><CircleHelp size={20} /><span className="sr-only">Guia de início</span></a>
-        <span className="rail-version">0.8</span>
+        <span className="rail-version">0.10</span>
       </aside>
 
       <div className="workspace">
         <header className="global-header">
           <Brand />
-          <div className="header-product"><span className="header-divider" /><span>{current.section}</span><span className="version-tag">v0.9.0</span></div>
+          <div className="header-product"><span className="header-divider" /><span>{current.section}</span><span className="version-tag">v0.10.0</span></div>
           <div className="environment-status"><span className="environment-dot" /><span>SESSÃO LOCAL</span><span className="environment-separator" /><Monitor size={13} /><span>NO NAVEGADOR</span></div>
         </header>
 
@@ -86,7 +86,7 @@ function Laboratory() {
           <div className="breadcrumbs" aria-label="Localização"><span>WORKSPACE</span><ChevronRight size={11} /><span>{current.section}</span></div>
           <section className="workspace-intro" aria-labelledby="workspace-title">
             <div><div className="section-eyebrow"><span />SEU CORPO. SEU CONTROLE.</div><h1 id="workspace-title">{current.title}<span className="title-period">.</span></h1><p>{current.description}</p></div>
-            <div className="phase-chip"><span className="phase-number">09</span><div><span>FASE ATUAL</span><strong>Impacto</strong></div></div>
+            <div className="phase-chip"><span className="phase-number">10</span><div><span>FASE ATUAL</span><strong>Conteúdo</strong></div></div>
           </section>
 
           <div className="workspace-view-tabs" role="tablist" aria-label="Área de trabalho">
@@ -111,7 +111,7 @@ function Laboratory() {
             <div className="guide-lighting"><span className="lighting-symbol" aria-hidden="true">✳</span>Uma boa iluminação e um fundo livre ajudam o rastreamento.<a href="#laboratorio">Tudo pronto <ArrowUpRight size={13} /></a></div>
           </section>
 
-          <footer className="workspace-footer"><p><ShieldCheck size={14} /> Seu movimento fica com você.<span>Processamento local, sem gravação ou envio de vídeo.</span></p><div className="phase-roadmap" aria-label="Progresso das fases"><span className="is-complete"><Check size={10} />07 <span>Expansões</span></span><ChevronRight size={11} /><span className="is-complete"><Check size={10} />08 <span>Precisão</span></span><ChevronRight size={11} /><span className="is-active"><span className="roadmap-dot" />09 <span>Impacto</span></span></div></footer>
+          <footer className="workspace-footer"><p><ShieldCheck size={14} /> Seu movimento fica com você.<span>Processamento local, sem gravação ou envio de vídeo.</span></p><div className="phase-roadmap" aria-label="Progresso das fases"><span className="is-complete"><Check size={10} />08 <span>Precisão</span></span><ChevronRight size={11} /><span className="is-complete"><Check size={10} />09 <span>Impacto</span></span><ChevronRight size={11} /><span className="is-active"><span className="roadmap-dot" />10 <span>Conteúdo</span></span></div></footer>
         </main>
       </div>
     </div>

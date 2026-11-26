@@ -1,6 +1,9 @@
 import { create } from 'zustand'
 import type { CombatSnapshot } from '../types/combat'
 import type { AttackKind, AttackSide } from '../types/animation'
+import type { CircuitOutcome } from '../engine/career/circuit'
+import type { Difficulty, RivalId } from '../engine/combat/opponents'
+import type { TutorialView } from '../engine/tutorial/tutorial'
 
 const noStats = Object.freeze({ attacks: 0, hits: 0, blocks: 0, dodges: 0, damage: 0, combos: 0, bestStreak: 0 })
 
@@ -16,9 +19,9 @@ export interface OpponentCue {
   readonly kind: AttackKind
 }
 
-interface MatchStore {
-  snapshot: CombatSnapshot
-  sceneFps: number | null
+/** A quick fight against a chosen opponent, the next fight of the circuit, or the guided training. */
+export type MatchKind = 'quick' | 'circuit' | 'training'
+export interface MatchStatus {
   canFight: boolean
   opponentCue: OpponentCue | null
   /** Progress (0–1) of the hands-free resume after the player returned to view. */
@@ -27,7 +30,21 @@ interface MatchStore {
   armed: boolean
   /** Camera running and calibrated, so a start can be armed before the player is framed. */
   canArm: boolean
-  publish: (snapshot: CombatSnapshot, canFight: boolean, opponentCue: OpponentCue | null, autoResume: number | null, armed: boolean, canArm: boolean) => void
+  /** Kind chosen for the next webcam match. */
+  kind: MatchKind
+  /** The robot in the opposite corner: the running, finished or replayed match, otherwise the next one. */
+  rival: RivalId
+  difficulty: Difficulty
+  /** Guided-training progress while a training session runs. */
+  training: TutorialView | null
+  /** What the last finished circuit match meant for the run. */
+  circuitOutcome: CircuitOutcome | null
+}
+
+interface MatchStore extends MatchStatus {
+  snapshot: CombatSnapshot
+  sceneFps: number | null
+  publish: (snapshot: CombatSnapshot, status: MatchStatus) => void
   setSceneFps: (fps: number | null) => void
 }
 
@@ -40,6 +57,11 @@ export const useMatchStore = create<MatchStore>((set) => ({
   autoResume: null,
   armed: false,
   canArm: false,
-  publish: (snapshot, canFight, opponentCue, autoResume, armed, canArm) => set({ snapshot, canFight, opponentCue, autoResume, armed, canArm }),
+  kind: 'quick',
+  rival: 'vulcan',
+  difficulty: 'normal',
+  training: null,
+  circuitOutcome: null,
+  publish: (snapshot, status) => set({ snapshot, ...status }),
   setSceneFps: (sceneFps) => set({ sceneFps }),
 }))

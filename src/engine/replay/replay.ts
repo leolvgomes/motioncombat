@@ -4,6 +4,8 @@ import type { CombatEvent, CombatRotations, CombatSnapshot, ComboId, FighterActi
 import type { ArenaId, RobotLook } from '../../types/customization'
 import { parseStats } from '../career/career'
 import { COMBOS } from '../combat/combos'
+import { sanitizeDifficulty, sanitizeOpponent } from '../combat/opponents'
+import type { Difficulty, OpponentId } from '../combat/opponents'
 import { RIG_JOINTS } from '../motion/rig-controller'
 
 /**
@@ -35,6 +37,9 @@ export interface ReplayMeta {
   readonly name: string
   readonly look: RobotLook
   readonly arena: ArenaId
+  /** Replays recorded before phase 10 were all against VULCAN-07 on normal. */
+  readonly opponent: OpponentId
+  readonly difficulty: Difficulty
 }
 
 export interface ReplayEvent { readonly time: number; readonly event: CombatEvent }
@@ -420,7 +425,10 @@ export function decodeReplay(raw: string | null, sanitize: ReplaySanitizers): Re
     const frames = fromBase64(stored.frames)
     if (frames.length !== frameCount * REPLAY_STRIDE) return null
     return {
-      meta: { id, recordedAt, mode, name: sanitize.name(meta.name), look: sanitize.look(meta.look), arena: sanitize.arena(meta.arena) },
+      meta: {
+        id, recordedAt, mode, name: sanitize.name(meta.name), look: sanitize.look(meta.look), arena: sanitize.arena(meta.arena),
+        opponent: sanitizeOpponent(meta.opponent), difficulty: sanitizeDifficulty(meta.difficulty),
+      },
       winner, playerStats, opponentStats, duration: totalDuration(frames, frameCount), frameCount, frames, events,
     }
   } catch { return null }

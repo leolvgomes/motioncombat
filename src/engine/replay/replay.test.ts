@@ -11,7 +11,7 @@ import type { Replay, ReplayMeta } from './replay'
 
 const sanitizers = { name: sanitizeName, look: sanitizeLook, arena: sanitizeArena }
 const meta = (id = 'match', mode: ReplayMeta['mode'] = 'demo', recordedAt = 1000): ReplayMeta => ({
-  id, recordedAt, mode, name: 'ATLAS-01', look: sanitizeLook(null), arena: 'harbor',
+  id, recordedAt, mode, name: 'ATLAS-01', look: sanitizeLook(null), arena: 'harbor', opponent: 'basalt', difficulty: 'hard',
 })
 
 interface Sample { time: number; round: number; health: [number, number]; frames: Record<FighterId, { position: number[]; shoulder: Quaternion }> }
@@ -184,6 +184,14 @@ describe('replay storage format', () => {
     stored.meta.arena = 'moon'
     const decoded = decodeReplay(JSON.stringify(stored), sanitizers)
     expect(decoded?.meta).toMatchObject({ name: 'BXB', arena: 'foundry', look: { armor: 'titanium' } })
+  })
+
+  it('opens replays saved before opponents existed as VULCAN-07 on normal', () => {
+    const stored = JSON.parse(encodeReplay(recorded.replay)) as { meta: Record<string, unknown> }
+    expect(decodeReplay(JSON.stringify(stored), sanitizers)?.meta).toMatchObject({ opponent: 'basalt', difficulty: 'hard' })
+    delete stored.meta.opponent
+    delete stored.meta.difficulty
+    expect(decodeReplay(JSON.stringify(stored), sanitizers)?.meta).toMatchObject({ opponent: 'vulcan', difficulty: 'normal' })
   })
 })
 

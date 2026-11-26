@@ -39,15 +39,24 @@ function FighterHealth({ name, label, health, wins, streak, overdrive, opponent 
   </div>
 }
 
-export function CombatHud({ snapshot, names, replay }: { snapshot: CombatSnapshot; names: FighterNames; replay: boolean }) {
+export function CombatHud({ snapshot, names, replay, rivalLabel, training }: {
+  snapshot: CombatSnapshot
+  names: FighterNames
+  replay: boolean
+  /** Style and difficulty of the opponent, shown above its name. */
+  rivalLabel: string
+  /** Guided training has no clock and no rounds. */
+  training: boolean
+}) {
   const opponentCue = useMatchStore((state) => state.opponentCue)
   const meters = !replay && snapshot.phase !== 'ready'
   const playerCharged = meters && snapshot.mode === 'webcam' && snapshot.phase === 'fighting' && snapshot.playerOverdrive >= 100
   return <div className="combat-hud">
     <FighterHealth name={names.player} streak={snapshot.playerStreak} label={snapshot.mode === 'demo' ? 'UNIDADE 01 · IA' : 'SEU ROBÔ'} health={snapshot.playerHealth} wins={snapshot.playerWins} overdrive={meters ? snapshot.playerOverdrive : null} />
-    <div className="combat-clock"><span>MELHOR DE 3</span><strong><Clock3 size={15} aria-hidden="true" />{clock(snapshot.secondsLeft)}</strong><small>{snapshot.pauseReason && !replay ? 'PAUSADO' : `ROUND ${snapshot.round} / 3`}</small></div>
-    <FighterHealth name={names.opponent} streak={snapshot.opponentStreak} label="OPONENTE · IA" health={snapshot.opponentHealth} wins={snapshot.opponentWins} overdrive={meters ? snapshot.opponentOverdrive : null} opponent />
+    {training ? <div className="combat-clock"><span>TREINO GUIADO</span><strong>LIVRE</strong><small>{snapshot.pauseReason ? 'PAUSADO' : 'SEM RELÓGIO'}</small></div>
+      : <div className="combat-clock"><span>MELHOR DE 3</span><strong><Clock3 size={15} aria-hidden="true" />{clock(snapshot.secondsLeft)}</strong><small>{snapshot.pauseReason && !replay ? 'PAUSADO' : `ROUND ${snapshot.round} / 3`}</small></div>}
+    <FighterHealth name={names.opponent} streak={snapshot.opponentStreak} label={rivalLabel} health={snapshot.opponentHealth} wins={snapshot.opponentWins} overdrive={meters ? snapshot.opponentOverdrive : null} opponent />
     {playerCharged && !opponentCue && <div className="combat-overdrive-hint" role="status">Sobrecarga pronta<span>Soque com as duas mãos ao mesmo tempo</span></div>}
-    {opponentCue && <div className="combat-opponent-cue" role="status">VULCAN prepara {attackLabel(opponentCue.kind, opponentCue.side)}<span>Prepare a guarda ou esquive</span></div>}
+    {opponentCue && <div className="combat-opponent-cue" role="status">{names.opponent} prepara {attackLabel(opponentCue.kind, opponentCue.side)}<span>Prepare a guarda ou esquive</span></div>}
   </div>
 }

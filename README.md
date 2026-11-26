@@ -1,6 +1,6 @@
 # STEEL SYNC — Motion Combat
 
-Jogo web de combate robótico controlado pelo corpo. As **fases 1 a 5** implementam webcam, rastreamento corporal, robôs 3D procedurais, calibração, gestos, animações híbridas e uma partida local contra IA, com arena, hitboxes, vida, defesa, rounds e resultado. A **fase 6** acrescenta polimento: faíscas e anéis de impacto, tremor de câmera, som procedural, narração para leitores de tela, atalhos de teclado e sugestão de qualidade por FPS. A **fase 7** acrescenta ganchos, uppercuts e combos, personalização do robô, três cenários, carreira com ranking local e replays de movimento. A **fase 8** trata desempenho e precisão: rastreamento em segundo plano, ritmo da cena conforme a GPU, filtro adaptativo e aferição guiada. A **fase 9** trata o impacto visual: desgaste e fumaça conforme a vida cai, reação diferente para cada golpe, queda no nocaute com câmera lenta, o golpe especial Sobrecarga e brilho cinematográfico opcional. O laboratório de movimento continua disponível; uma demonstração IA × IA permite observar o combate sem câmera.
+Jogo web de combate robótico controlado pelo corpo. As **fases 1 a 5** implementam webcam, rastreamento corporal, robôs 3D procedurais, calibração, gestos, animações híbridas e uma partida local contra IA, com arena, hitboxes, vida, defesa, rounds e resultado. A **fase 6** acrescenta polimento: faíscas e anéis de impacto, tremor de câmera, som procedural, narração para leitores de tela, atalhos de teclado e sugestão de qualidade por FPS. A **fase 7** acrescenta ganchos, uppercuts e combos, personalização do robô, três cenários, carreira com ranking local e replays de movimento. A **fase 8** trata desempenho e precisão: rastreamento em segundo plano, ritmo da cena conforme a GPU, filtro adaptativo e aferição guiada. A **fase 9** trata o impacto visual: desgaste e fumaça conforme a vida cai, reação diferente para cada golpe, queda no nocaute com câmera lenta, o golpe especial Sobrecarga e brilho cinematográfico opcional. A **fase 10** traz conteúdo para um jogador: quatro adversários com estilos próprios, três dificuldades, um circuito de quatro lutas, treino guiado e demonstrações sempre diferentes. O laboratório de movimento continua disponível; uma demonstração IA × IA permite observar o combate sem câmera.
 
 ## Stack
 
@@ -70,6 +70,8 @@ Execute `setup:tracking` **antes do build** para incluir o modelo e WASM em `dis
 12. Em **Garagem**, escolha nome, blindagem, luzes, cabeça, ombreiras e cenário. São mudanças visuais: alcance, dano e áreas de contato não mudam. O cenário também pode ser trocado abaixo da arena.
 13. Ao fim de uma partida, use **Ver replay** ou abra **Carreira**. O replay tem pausa (**P**), linha do tempo e velocidades de 0,25× a 2×. Uma partida em andamento ou pausada nunca é interrompida por um replay.
 14. **Carreira** mostra estatísticas, ranking das 10 melhores partidas e replays. Somente partidas com webcam entram nas estatísticas; as demonstrações geram apenas replays.
+15. Abaixo da arena, escolha o tipo de luta. **Luta rápida**: escolha um dos quatro adversários (KESTREL-3, BASALTO-9, MAGNA-X e VULCAN-07) e a dificuldade. **Circuito**: quatro lutas em sequência até o campeão; vitória avança, empate repete a luta e derrota encerra o circuito. **Treino guiado**: um robô de treino que só ataca nas etapas de defesa; cada etapa avança quando a câmera reconhece o golpe ou a defesa, e uma etapa sem reconhecimento por 35 s é pulada sozinha. O treino não tem relógio, não tira integridade e não entra na carreira.
+16. A dificuldade muda o aviso antes de cada golpe, as pausas e as sequências do adversário e o dano que ele causa. Fácil vale menos pontos no ranking; Difícil vale mais.
 
 A arena, o laboratório e a garagem alternam a cena 3D; somente um canvas 3D fica montado. Captura e calibração continuam montadas ao trocar de visão. Os ajustes de duração/amplitude do laboratório não alteram as regras balanceadas da partida.
 
@@ -234,11 +236,13 @@ A fase 8 acrescenta testes do Worker, do agendamento, do ritmo da cena, do filtr
 
 A fase 9 acrescenta testes da Sobrecarga, do soco duplo, da reação por golpe, dos efeitos de dano e da câmera lenta. Veja o [relatório da fase 9](docs/phase-9-review.md).
 
+A fase 10 acrescenta testes dos estilos de IA, das dificuldades, do modo de treino no motor, do circuito, do treino guiado, da variação das demonstrações e da leitura de dados salvos antes da fase. Veja o [relatório da fase 10](docs/phase-10-review.md).
+
 A resposta de ganchos e uppercuts com webcam permanece **pendente de revisão real**. A demonstração é identificada como programada e não preenche os indicadores da webcam com dados artificiais. O [relatório da fase 3](docs/phase-3-review.md) preserva o histórico da correção frontal.
 
 ## Limitações atuais
 
-- Não há golpe especial nem multiplayer online, que exigiria um servidor. Carreira, ranking e replays existem só neste navegador e podem ser apagados com os dados do site. Não há fila de golpes nem ataques simultâneos do mesmo robô. Na arena os dois lutadores podem atacar ao mesmo tempo; a resolução considera o contato de cada um.
+- Não há multiplayer online, que exigiria um servidor. Carreira, circuito, ranking e replays existem só neste navegador e podem ser apagados com os dados do site. Não há fila de golpes nem ataques simultâneos do mesmo robô. Na arena os dois lutadores podem atacar ao mesmo tempo; a resolução considera o contato de cada um.
 - Hitboxes são aproximações geométricas de cabeça/corpo e punhos, sem física de contato entre peças ou IK para alcançar um alvo. A IA e o balanceamento são iniciais; os limiares de ganchos e uppercuts são iniciais.
 - Efeitos e sons são procedurais e simples: não há pós-processamento, bloom, câmera lenta, trilha musical ou locução gravada. Os sons foram verificados com um duplo do Web Audio, não por audição; timbre e volume precisam de revisão real.
 - A narração acessível cobre eventos da partida, mas o jogo continua exigindo movimento corporal visível pela câmera; não há modo alternativo de controle.
@@ -266,9 +270,11 @@ A resposta de ganchos e uppercuts com webcam permanece **pendente de revisão re
 6. **Polimento:** implementada; efeitos de impacto, som procedural, acessibilidade e sugestão de qualidade.
 7. **Expansões:** implementada; combos avançados, personalização, cenários, carreira, ranking local e replays. O multiplayer online fica para uma fase própria, com backend.
 8. **Desempenho e precisão:** implementada; socos retos ajustados com a aferição de 26/11/2026. Cruzado e uppercut aguardam nova aferição com os nomes novos.
-9. **Impacto visual:** implementação atual para revisão.
+9. **Impacto visual:** implementada; desgaste, nocaute com câmera lenta, Sobrecarga e brilho opcional.
+10. **Conteúdo para um jogador:** implementação atual para revisão.
+11. **Online:** backend, contas, ranking global e multiplayer. Ainda não autorizada.
 
-O desenvolvimento está interrompido na fase 9 para revisão antes do commit. Sugestão de commit: `feat: add battle damage, knockout cinematics and overdrive special`.
+O desenvolvimento está interrompido na fase 10 para revisão antes do commit. Sugestão de commit: `feat: add opponents, difficulty, circuit and guided training`.
 
 ## Referências técnicas
 
