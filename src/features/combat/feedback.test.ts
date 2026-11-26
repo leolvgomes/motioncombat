@@ -33,7 +33,7 @@ describe('custom names and combos', () => {
     const names = { player: 'TROVÃO', opponent: 'VULCAN-07' }
     expect(announcementForEvent({ type: 'combo', combo: { id: 1, fighter: 'player', combo: 'one-two', bonus: 3 } }, names)).toBe('Combo Um-dois de TROVÃO. Mais 3 de dano.')
     expect(announcementForEvent({ type: 'match-end', winner: 'player', mode: 'webcam' }, names)).toBe('Fim de partida. TROVÃO venceu.')
-    expect(attackLabel('hook', 'left')).toBe('gancho esquerdo')
+    expect(attackLabel('hook', 'left')).toBe('cruzado esquerdo')
     expect(attackLabel('uppercut', 'right')).toBe('uppercut direito')
   })
 })
@@ -71,7 +71,9 @@ describe('feedback settings', () => {
     expect(parseFeedbackSettings('not json')).toEqual(DEFAULT_FEEDBACK)
     expect(parseFeedbackSettings('[1,2]')).toEqual(DEFAULT_FEEDBACK)
     expect(parseFeedbackSettings(JSON.stringify({ soundEnabled: false, volume: 3, effectsEnabled: 'no', shakeEnabled: false })))
-      .toEqual({ soundEnabled: false, volume: 1, effectsEnabled: true, shakeEnabled: false })
+      .toEqual({ soundEnabled: false, volume: 1, effectsEnabled: true, shakeEnabled: false, cinematicEnabled: true, bloomEnabled: false })
+    // Settings saved before phase 9 keep the new effects at their defaults.
+    expect(parseFeedbackSettings(JSON.stringify({ cinematicEnabled: false, bloomEnabled: 1 }))).toMatchObject({ cinematicEnabled: false, bloomEnabled: false })
     expect(parseFeedbackSettings(JSON.stringify({ volume: 'loud' })).volume).toBe(DEFAULT_FEEDBACK.volume)
   })
 

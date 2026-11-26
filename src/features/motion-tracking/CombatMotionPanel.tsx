@@ -36,14 +36,14 @@ export function CombatMotionPanel() {
 
       <div className="motion-recognition">
         <div className="motion-section-label"><Activity size={15} aria-hidden="true" />LEITURA EM TEMPO REAL</div>
-        <div className="recognized-movement"><span>ÚLTIMO MOVIMENTO RECONHECIDO</span><strong>{lastEvent ? gestureLabels[lastEvent.type] : 'Aguardando seu movimento'}</strong><small>{lastEvent ? `Confiança do rastreamento: ${Math.round(lastEvent.confidence * 100)}% · lado anatômico do jogador` : advancedAttacks ? 'Guarda, socos retos, ganchos, uppercuts e inclinações laterais' : 'Guarda, socos retos e inclinações laterais'}</small></div>
+        <div className="recognized-movement"><span>ÚLTIMO MOVIMENTO RECONHECIDO</span><strong>{lastEvent ? gestureLabels[lastEvent.type] : 'Aguardando seu movimento'}</strong><small>{lastEvent ? `Confiança do rastreamento: ${Math.round(lastEvent.confidence * 100)}% · lado anatômico do jogador` : advancedAttacks ? 'Guarda, socos retos, cruzados, uppercuts e inclinações laterais' : 'Guarda, socos retos e inclinações laterais'}</small></div>
         <div className="motion-signal-grid"><div><Shield size={15} aria-hidden="true" /><span>Postura</span><strong>{ready && features?.valid ? postureLabel : '—'}</strong></div><div><ArrowLeftRight size={15} aria-hidden="true" /><span>Profundidade</span><strong>{!ready || !features?.valid ? '—' : features.depthAvailable ? '3D disponível' : 'Sem confiança'}</strong></div></div>
         <div className="arm-extension-grid">{(['left', 'right'] as const).map((side) => {
           const arm = side === 'left' ? features?.leftArm : features?.rightArm
           const label = side === 'left' ? 'Braço esquerdo' : 'Braço direito'
           return <div className="arm-extension" key={side}><div><span>{label}</span><strong>{arm && ready ? `${Math.round(arm.reach * 100)}%` : '—'}</strong></div><div className="extension-track"><span style={{ transform: `scaleX(${arm && ready ? arm.reach : 0})` }} /></div><small>Alcance do soco · conta a partir de 80%</small></div>
         })}</div>
-        <div className="motion-advanced"><Toggle label="Ganchos e uppercuts" checked={advancedAttacks} onChange={() => setAdvancedAttacks(!advancedAttacks)} /><small>Gancho: abra o punho para fora e cruze até o centro. Uppercut: desça o punho abaixo do ombro e suba com o cotovelo dobrado. A outra mão fica na guarda. Desative se notar golpes indevidos.</small></div>
+        <div className="motion-advanced"><Toggle label="Cruzados e uppercuts" checked={advancedAttacks} onChange={() => setAdvancedAttacks(!advancedAttacks)} /><small>Cruzado (gancho lateral): o punho vem de fora e cruza até o centro, na altura do rosto. Uppercut: o punho desce até a barriga e sobe com o cotovelo dobrado. A outra mão fica na guarda. Desative se notar golpes indevidos.</small></div>
         {events.length > 0 && <ol className="gesture-history" aria-label="Últimos gestos detectados">{events.map((event, index) => <li key={`${event.timestamp}-${event.type}-${index}`}><span>{gestureLabels[event.type]}</span><small>{Math.round(event.confidence * 100)}%</small></li>)}</ol>}
       </div>
     </div>

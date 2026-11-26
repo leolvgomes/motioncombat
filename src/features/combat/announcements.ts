@@ -6,7 +6,7 @@ import { DEFAULT_NAME, OPPONENT_NAME } from '../customization/catalog'
 export type FighterNames = Readonly<Record<FighterId, string>>
 export const DEFAULT_NAMES: FighterNames = { player: DEFAULT_NAME, opponent: OPPONENT_NAME }
 
-const ATTACK_NOUNS: Readonly<Record<AttackKind, string>> = { straight: 'soco', hook: 'gancho', uppercut: 'uppercut' }
+const ATTACK_NOUNS: Readonly<Record<AttackKind, string>> = { straight: 'soco', hook: 'cruzado', uppercut: 'uppercut' }
 
 export function attackLabel(kind: AttackKind, side: AttackSide): string {
   return `${ATTACK_NOUNS[kind]} ${side === 'left' ? 'esquerdo' : 'direito'}`
@@ -27,12 +27,13 @@ export function announcementForEvent(event: CombatEvent, names: FighterNames = D
       const { attacker, result } = event.impact
       const defender = names[attacker === 'player' ? 'opponent' : 'player']
       const health = Math.max(0, Math.ceil(event.defenderHealth))
-      if (result === 'hit') return `${defender} atingido. Integridade ${health}.`
+      if (result === 'hit') return `${defender} atingido${event.impact.special ? ' pela sobrecarga' : ''}. Integridade ${health}.`
       if (result === 'blocked') return `${defender} bloqueou. Integridade ${health}.`
       if (result === 'dodged') return `${defender} esquivou.`
       return null
     }
     case 'combo': return `Combo ${comboById(event.combo.combo).name} de ${names[event.combo.fighter]}. Mais ${event.combo.bonus} de dano.`
+    case 'special': return `Sobrecarga de ${names[event.fighter]}!`
     case 'round-end':
       if (event.winner === 'draw') return `Round ${event.round} empatado.`
       return `${event.knockout ? 'Nocaute! ' : 'Tempo esgotado. '}${winnerName(event.winner)} vence o round ${event.round}.`

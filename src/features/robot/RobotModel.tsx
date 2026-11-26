@@ -3,7 +3,7 @@ import type { RefObject } from 'react'
 import type { BufferGeometry, Group, Material } from 'three'
 import type { HeadId, RobotLook, ShoulderId } from '../../types/customization'
 import { DEFAULT_LOOK } from '../customization/catalog'
-import { applyRobotLook, createRobotResources } from './robot-resources'
+import { applyRobotCondition, applyRobotLook, createRobotResources } from './robot-resources'
 import type { RobotResources, RobotVariant } from './robot-resources'
 
 /** Local rest axes point down -Y; +Z is forward and anatomical left is +X. */
@@ -21,6 +21,8 @@ export interface RobotRig {
   leftKnee: Group
   rightHip: Group
   rightKnee: Group
+  /** Battle wear for this robot's own materials: damage and glow 0–1, flicker multiplies its lights. */
+  condition: (damage: number, flicker: number, glow: number) => void
 }
 
 type Vector3Tuple = [number, number, number]
@@ -169,10 +171,11 @@ export function RobotModel({ rigRef, variant = 'player', look = DEFAULT_LOOK }: 
       leftShoulder: leftShoulder.current, leftElbow: leftElbow.current, leftWrist: leftWrist.current,
       rightShoulder: rightShoulder.current, rightElbow: rightElbow.current, rightWrist: rightWrist.current,
       leftHip: leftHip.current, leftKnee: leftKnee.current, rightHip: rightHip.current, rightKnee: rightKnee.current,
+      condition: (damage, flicker, glow) => applyRobotCondition(resources, damage, flicker, glow),
     }
     rigRef.current = rig
     return () => { if (rigRef.current === rig) rigRef.current = null }
-  }, [rigRef])
+  }, [rigRef, resources])
 
   useEffect(() => {
     // React StrictMode replays effect setup/cleanup. Cancel the provisional disposal on replay.

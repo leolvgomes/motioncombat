@@ -1,8 +1,13 @@
 import { Component, memo, useEffect, useMemo, useRef, useState } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { AdditiveBlending, BoxGeometry, Color, CylinderGeometry, DodecahedronGeometry, DoubleSide, GridHelper, Matrix4, MeshBasicMaterial, MeshStandardMaterial, OctahedronGeometry, RingGeometry, Vector3 } from 'three'
-import type { BufferGeometry, InstancedMesh, Material, Mesh } from 'three'
+import { AdditiveBlending, BoxGeometry, Color, CylinderGeometry, DodecahedronGeometry, DoubleSide, GridHelper, Matrix4, MeshBasicMaterial, MeshStandardMaterial, OctahedronGeometry, RingGeometry, Vector2, Vector3 } from 'three'
+import type { BufferGeometry, InstancedMesh, Material, Mesh, PointLight } from 'three'
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
+import { KnockoutCinematic, SmokePuffs, SpecialFlash, damageLevel, fallAmount, lightFlicker, smokeRate } from '../../engine/effects/cinematic-effects'
 import { CameraShake, ImpactParticles, ImpactPulses, impactFeedback } from '../../engine/effects/impact-effects'
 import { RIG_JOINTS } from '../../engine/motion/rig-controller'
 import { useProfileStore } from '../../stores/profile-store'
@@ -24,6 +29,11 @@ const IMPACT_COLOR = new Color('#fff0c5')
 const FIGHTER_IDS = ['player', 'opponent'] as const
 const SPARK_CAPACITY = 64
 const PULSE_CAPACITY = 4
+const SMOKE_CAPACITY = 48
+/** A knocked-out robot ends almost flat on its back. */
+const FALL_ANGLE = 1.42
+const SMOKE_DARK = new Color('#1c1f22')
+const SMOKE_LIGHT = new Color('#6b7075')
 const SPARK_COLORS = {
   hit: [new Color('#ff5a1f'), new Color('#ffe2a0')],
   blocked: [new Color('#2a8fc4'), new Color('#bff7ff')],
@@ -38,9 +48,15 @@ function createArenaFeedback() {
   const particles = new ImpactParticles(SPARK_CAPACITY)
   const pulses = new ImpactPulses(PULSE_CAPACITY)
   const shake = new CameraShake()
+  const smoke = new SmokePuffs(SMOKE_CAPACITY)
+  const knockout = new KnockoutCinematic()
+  const flash = new SpecialFlash()
+  const flashPoint = new Vector3()
   return {
-    particles, pulses, shake,
-    clear() { particles.clear(); pulses.clear(); shake.clear() },
+    particles, pulses, shake, smoke, knockout, flash, flashPoint,
+    /** Clock multiplier for this frame; below 1 during the knockout slow motion. */
+    timeScale: 1,
+    clear() { particles.clear(); pulses.clear(); shake.clear(); smoke.clear(); knockout.clear(); flash.clear(); this.timeScale = 1 },
   }
 }
 
@@ -55,6 +71,7 @@ function createArenaResources({ colors }: ArenaTheme) {
     centerRing: new RingGeometry(1, 1.012, 64),
     marker: new RingGeometry(0.54, 0.57, 48),
     spark: new OctahedronGeometry(1, 0),
+    smoke: new DodecahedronGeometry(1, 1),
     pulse: new RingGeometry(0.72, 1, 40),
     rock: new DodecahedronGeometry(1, 0),
   }
@@ -74,6 +91,7 @@ function createArenaResources({ colors }: ArenaTheme) {
     playerMarker: new MeshBasicMaterial({ color: TEAM_COLOR.player, transparent: true, opacity: 0.25, depthWrite: false, toneMapped: false }),
     opponentMarker: new MeshBasicMaterial({ color: TEAM_COLOR.opponent, transparent: true, opacity: 0.25, depthWrite: false, toneMapped: false }),
     spark: new MeshBasicMaterial({ toneMapped: false }),
+    smoke: new MeshStandardMaterial({ transparent: true, opacity: 0.42, depthWrite: false, roughness: 1, metalness: 0 }),
   }
   const pulseMaterials = Array.from({ length: PULSE_CAPACITY }, () => new MeshBasicMaterial({
     transparent: true, opacity: 0, depthWrite: false, blending: AdditiveBlending, side: DoubleSide, toneMapped: false,
@@ -117,9 +135,10 @@ function StagePart({ geometry, material, position, scale, rotation, shadow = fal
   return <mesh geometry={geometry} material={material} position={position} scale={scale} rotation={rotation} receiveShadow={shadow} />
 }
 
-function applyFighter(model: RobotRig, frame: FighterFrame, marker: Mesh, material: MeshBasicMaterial, id: FighterId, swing: number, reduced: boolean) {
+function applyFighter(model: RobotRig, frame: FighterFrame, marker: Mesh, material: MeshBasicMaterial, id: FighterId, swing: number, reduced: boolean, fall: number) {
   model.root.position.fromArray(frame.position)
-  model.root.rotation.set(0, frame.yaw, 0)
+  // Euler XYZ applies X last, about the world axis: each robot falls backward, away from its opponent.
+  model.root.rotation.set((id === 'player' ? -1 : 1) * fall * FALL_ANGLE, frame.yaw, 0)
   for (const name of RIG_JOINTS) model[name].quaternion.copy(frame.rotations[name])
   model.leftHip.rotation.set(-0.025 + swing, 0, 0.025)
   model.rightHip.rotation.set(0.025 - swing, 0, -0.025)
@@ -132,7 +151,9 @@ function applyFighter(model: RobotRig, frame: FighterFrame, marker: Mesh, materi
   marker.scale.setScalar(reduced ? 1 : 1 + flash * 0.12)
 }
 
-function ArenaFighters({ resources }: { resources: ArenaResources }) {
+const emitPoint = new Vector3()
+
+function ArenaFighters({ resources, feedback }: { resources: ArenaResources; feedback: ArenaFeedback }) {
   const look = useProfileStore((state) => state.look)
   const replayLook = useReplayStore((state) => state.playback?.meta.look)
   const player = useRef<RobotRig | null>(null)
@@ -142,6 +163,9 @@ function ArenaFighters({ resources }: { resources: ArenaResources }) {
   const reducedMotion = useRef(false)
   const timer = useRef({ elapsed: 0, frames: 0, primed: false })
   const legs = useRef({ player: { phase: 0, swing: 0 }, opponent: { phase: Math.PI, swing: 0 } })
+  const wear = useRef({
+    player: { knockedOut: 0, glow: 0, crackle: 0 }, opponent: { knockedOut: 0, glow: 0, crackle: 0 }, clock: 0,
+  })
   const rigs = { player, opponent }
   const markers = { player: playerMarker, opponent: opponentMarker }
 
@@ -160,11 +184,19 @@ function ArenaFighters({ resources }: { resources: ArenaResources }) {
 
   useFrame((_state, elapsed) => {
     if (!player.current || !opponent.current || !playerMarker.current || !opponentMarker.current || document.visibilityState === 'hidden') return
-    const dt = Math.max(0, Math.min(Number.isFinite(elapsed) ? elapsed : 0, 0.1))
+    const real = Math.max(0, Math.min(Number.isFinite(elapsed) ? elapsed : 0, 0.1))
+    const settings = useSettingsStore.getState()
+    feedback.knockout.step(real)
+    // The slowed clock drives the match too, but only once the round is decided, so it never changes a result.
+    feedback.timeScale = settings.cinematicEnabled && !reducedMotion.current ? feedback.knockout.timeScale : 1
+    const dt = real * feedback.timeScale
     matchRuntime.step(dt)
     const frames = matchRuntime.fighters
     const snapshot = matchRuntime.snapshot
     const advancing = snapshot.phase === 'fighting' && snapshot.pauseReason === null
+    const decided = snapshot.phase === 'round-over' || snapshot.phase === 'finished'
+    const frozen = snapshot.pauseReason !== null
+    if (!frozen) wear.current.clock += dt
     for (const id of FIGHTER_IDS) {
       const model = rigs[id].current
       const marker = markers[id].current
@@ -178,7 +210,27 @@ function ArenaFighters({ resources }: { resources: ArenaResources }) {
         const target = moving ? Math.sin(leg.phase) * 0.1 : 0
         leg.swing += (target - leg.swing) * -Math.expm1(-dt * 12)
       }
-      applyFighter(model, frame, marker, resources.materials[id === 'player' ? 'playerMarker' : 'opponentMarker'], id, leg.swing, reducedMotion.current)
+      const health = id === 'player' ? snapshot.playerHealth : snapshot.opponentHealth
+      const state = wear.current[id]
+      state.knockedOut = decided && health <= 0 ? state.knockedOut + (frozen ? 0 : dt) : 0
+      const fall = state.knockedOut > 0 ? reducedMotion.current ? 1 : fallAmount(state.knockedOut) : 0
+      applyFighter(model, frame, marker, resources.materials[id === 'player' ? 'playerMarker' : 'opponentMarker'], id, leg.swing, reducedMotion.current, fall)
+      const level = damageLevel(health)
+      // The special's glow rises fast while it is thrown and fades after it.
+      const glowTarget = frame.special && frame.action === 'attacking' ? 1 : 0
+      state.glow += (glowTarget - state.glow) * -Math.expm1(-real * (glowTarget > state.glow ? 18 : 5))
+      model.condition(level, reducedMotion.current ? 1 : lightFlicker(level, wear.current.clock), state.glow)
+      if (!settings.effectsEnabled || frozen || snapshot.phase === 'ready') continue
+      model.head.getWorldPosition(emitPoint)
+      feedback.smoke.emit(id, smokeRate(level), dt, emitPoint.x, emitPoint.y - 0.18, emitPoint.z)
+      if (level >= 0.7 && health > 0) {
+        state.crackle -= dt
+        if (state.crackle <= 0) {
+          state.crackle = 0.45 + (1 - level) * 2.4 + (Math.sin(wear.current.clock * 13.7 + (id === 'player' ? 0 : 2)) + 1) * 0.35
+          model.leftShoulder.getWorldPosition(emitPoint)
+          feedback.particles.burst('hit', emitPoint.x, emitPoint.y, emitPoint.z, id === 'player' ? -1 : 1, 0.22)
+        }
+      }
     }
     if (!timer.current.primed) { timer.current.primed = true; return }
     timer.current.elapsed += elapsed
@@ -203,6 +255,8 @@ const sparkColor = new Color()
 
 function ArenaEffects({ resources, feedback }: { resources: ArenaResources; feedback: ArenaFeedback }) {
   const sparks = useRef<InstancedMesh>(null)
+  const smoke = useRef<InstancedMesh>(null)
+  const flashLight = useRef<PointLight>(null)
   const pulses = useRef<(Mesh | null)[]>([])
   const epoch = useRef(matchRuntime.sceneEpoch)
 
@@ -212,6 +266,10 @@ function ArenaEffects({ resources, feedback }: { resources: ArenaResources; feed
     // Allocates the per-instance colour buffer once; only `count` instances are drawn.
     for (let index = 0; index < SPARK_CAPACITY; index++) mesh.setColorAt(index, sparkColor.set(0, 0, 0))
     mesh.count = 0
+    const puffs = smoke.current
+    if (!puffs) return
+    for (let index = 0; index < SMOKE_CAPACITY; index++) puffs.setColorAt(index, sparkColor.set(0, 0, 0))
+    puffs.count = 0
   }, [])
 
   useEffect(() => matchRuntime.subscribe((event) => {
@@ -223,8 +281,14 @@ function ArenaEffects({ resources, feedback }: { resources: ArenaResources; feed
     if (settings.effectsEnabled && response.burst) {
       feedback.particles.burst(response.burst, x, y, z, response.direction, response.amount * (reduced ? 0.5 : 1))
       feedback.pulses.spawn(response.burst, x, y, z)
+      if (event.impact.special) { feedback.flash.trigger(); feedback.flashPoint.set(x, y, z) }
     }
     if (settings.shakeEnabled && !reduced) feedback.shake.add(response.shake)
+    const landed = event.impact.result === 'hit' || event.impact.result === 'blocked'
+    if (landed && event.defenderHealth <= 0 && settings.cinematicEnabled && !reduced) {
+      const [fx, , fz] = matchRuntime.fighters[event.impact.attacker === 'player' ? 'opponent' : 'player'].position
+      feedback.knockout.trigger(fx, 1.1, fz)
+    }
   }), [feedback])
 
   useFrame(({ camera }, elapsed) => {
@@ -232,10 +296,35 @@ function ArenaEffects({ resources, feedback }: { resources: ArenaResources; feed
     if (snapshot.phase === 'ready' || epoch.current !== matchRuntime.sceneEpoch) feedback.clear()
     epoch.current = matchRuntime.sceneEpoch
     // Paused matches freeze their sparks with the rest of the scene.
-    const dt = snapshot.pauseReason === null ? Math.max(0, Math.min(Number.isFinite(elapsed) ? elapsed : 0, 0.1)) : 0
+    const dt = snapshot.pauseReason === null ? Math.max(0, Math.min(Number.isFinite(elapsed) ? elapsed : 0, 0.1)) * feedback.timeScale : 0
     const { particles } = feedback
     particles.step(dt)
     feedback.pulses.step(dt)
+    feedback.smoke.step(dt)
+    feedback.flash.step(dt)
+    const light = flashLight.current
+    if (light) {
+      const strength = feedback.flash.strength
+      light.visible = strength > 0
+      light.intensity = strength * strength * 60
+      light.position.copy(feedback.flashPoint)
+    }
+    const puffs = smoke.current
+    if (puffs) {
+      const { smoke: pool } = feedback
+      for (let index = 0; index < pool.count; index++) {
+        const age = pool.age(index)
+        // Grows as it rises, thinning out (shrinking) at the end of its life.
+        const size = 0.07 + age * 0.22 * (age > 0.75 ? (1 - age) / 0.25 : 1)
+        sparkMatrix.makeScale(size, size, size)
+        sparkMatrix.setPosition(pool.position[index * 3], pool.position[index * 3 + 1], pool.position[index * 3 + 2])
+        puffs.setMatrixAt(index, sparkMatrix)
+        puffs.setColorAt(index, sparkColor.copy(SMOKE_DARK).lerp(SMOKE_LIGHT, age))
+      }
+      puffs.count = pool.count
+      puffs.instanceMatrix.needsUpdate = true
+      if (puffs.instanceColor) puffs.instanceColor.needsUpdate = true
+    }
     const mesh = sparks.current
     if (mesh) {
       for (let index = 0; index < particles.count; index++) {
@@ -269,6 +358,8 @@ function ArenaEffects({ resources, feedback }: { resources: ArenaResources; feed
 
   return <>
     <instancedMesh ref={sparks} args={[resources.geometries.spark, resources.materials.spark, SPARK_CAPACITY]} frustumCulled={false} />
+    <instancedMesh ref={smoke} args={[resources.geometries.smoke, resources.materials.smoke, SMOKE_CAPACITY]} frustumCulled={false} renderOrder={1} />
+    <pointLight ref={flashLight} color="#bff7ff" distance={4} decay={2} intensity={0} visible={false} />
     {resources.pulseMaterials.map((material, index) => <mesh key={index} ref={(mesh) => { pulses.current[index] = mesh }}
       geometry={resources.geometries.pulse} material={material} visible={false} renderOrder={2} />)}
   </>
@@ -278,10 +369,38 @@ function ArenaWorld({ light }: { light: boolean }) {
   const feedback = useMemo(createArenaFeedback, [])
   const chosen = useProfileStore((state) => state.arena)
   const arena = useReplayStore((state) => state.playback?.meta.arena) ?? chosen
+  const bloom = useSettingsStore((state) => state.bloomEnabled)
   return <>
     <ArenaScene key={arena} light={light} feedback={feedback} arena={arena} />
-    <ArenaCamera shake={feedback.shake} />
+    <ArenaCamera shake={feedback.shake} knockout={feedback.knockout} />
+    {bloom && !light && <ArenaBloom />}
   </>
+}
+
+/**
+ * Optional bloom: emissive lights, sparks and the special's flash glow. It takes over rendering
+ * (priority 1), at the cost of extra full-screen passes, so it is off by default and never in Light quality.
+ */
+function ArenaBloom() {
+  const gl = useThree((state) => state.gl)
+  const scene = useThree((state) => state.scene)
+  const camera = useThree((state) => state.camera)
+  const width = useThree((state) => state.size.width)
+  const height = useThree((state) => state.size.height)
+  const composer = useMemo(() => {
+    const result = new EffectComposer(gl)
+    result.addPass(new RenderPass(scene, camera))
+    result.addPass(new UnrealBloomPass(new Vector2(256, 256), 0.6, 0.45, 0.82))
+    result.addPass(new OutputPass())
+    return result
+  }, [gl, scene, camera])
+  useEffect(() => {
+    composer.setPixelRatio(gl.getPixelRatio())
+    composer.setSize(width, height)
+  }, [composer, gl, width, height])
+  useEffect(() => () => composer.dispose(), [composer])
+  useFrame((_state, delta) => composer.render(delta), 1)
+  return null
 }
 
 /** Static scenery behind and beside the ring. It stays outside the fighters' reach and the camera's line of sight. */
@@ -379,13 +498,17 @@ function ArenaScene({ light, feedback, arena }: { light: boolean; feedback: Aren
       <StagePart geometry={g.box} material={m.cyan} position={[-2.596, -0.04, -0.34]} scale={[0.012, 0.027, 1.1]} />
       <StagePart geometry={g.box} material={m.orange} position={[-2.596, -0.04, 1.54]} scale={[0.012, 0.027, 1.1]} />
       <Backdrop resources={resources} />
-      <ArenaFighters resources={resources} />
+      <ArenaFighters resources={resources} feedback={feedback} />
       <ArenaEffects resources={resources} feedback={feedback} />
     </group>
   </>
 }
 
-function ArenaCamera({ shake }: { shake: CameraShake }) {
+const focusTarget = new Vector3()
+const lookTarget = new Vector3()
+const closeTarget = new Vector3()
+
+function ArenaCamera({ shake, knockout }: { shake: CameraShake; knockout: KnockoutCinematic }) {
   const camera = useThree((state) => state.camera)
   const width = useThree((state) => state.size.width)
   const height = useThree((state) => state.size.height)
@@ -397,14 +520,29 @@ function ArenaCamera({ shake }: { shake: CameraShake }) {
     camera.lookAt(...ARENA_CAMERA_TARGET)
     camera.updateProjectionMatrix()
   }, [camera, width, height])
+  const framed = useRef(false)
   useFrame((_state, elapsed) => {
     const paused = matchRuntime.snapshot.pauseReason !== null
     if (!paused) shake.step(elapsed)
-    if (shake.trauma <= 0 && offset.current.x === 0 && offset.current.y === 0 && offset.current.z === 0) return
+    const closeUp = knockout.closeUp
+    if (shake.trauma <= 0 && closeUp <= 0 && !framed.current && offset.current.x === 0 && offset.current.y === 0 && offset.current.z === 0) return
     if (shake.trauma <= 0) offset.current = { x: 0, y: 0, z: 0 }
     else shake.offset(offset.current)
-    camera.position.set(base.current.x + offset.current.x, base.current.y + offset.current.y, base.current.z + offset.current.z)
-    camera.lookAt(...ARENA_CAMERA_TARGET)
+    lookTarget.set(...ARENA_CAMERA_TARGET)
+    camera.position.copy(base.current)
+    if (closeUp > 0) {
+      // Closes in along the usual line of sight, keeping the fallen robot centred.
+      const { focus } = knockout
+      focusTarget.set(focus.x, focus.y, focus.z)
+      closeTarget.copy(base.current).sub(focusTarget).setLength(3.1).add(focusTarget)
+      camera.position.lerp(closeTarget, closeUp * 0.7)
+      lookTarget.lerp(focusTarget, closeUp)
+    }
+    framed.current = closeUp > 0
+    camera.position.x += offset.current.x
+    camera.position.y += offset.current.y
+    camera.position.z += offset.current.z
+    camera.lookAt(lookTarget)
   })
   return null
 }

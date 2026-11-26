@@ -14,6 +14,19 @@ export const ATTACK_RULES: Readonly<Record<AttackKind, AttackRules>> = Object.fr
   uppercut: Object.freeze({ damage: 18, blockedDamage: 4, lunge: 0.38 }),
 })
 
+/** The overdrive special replaces the rules of the attack it upgrades. */
+export const SPECIAL_RULES: AttackRules = Object.freeze({ damage: 28, blockedDamage: 10, lunge: 0.42 })
+
+export const OVERDRIVE_RULES = Object.freeze({
+  max: 100,
+  /** Meter gained per point of damage dealt on a clean hit, through a block, and per point received. */
+  perHitDamage: 1.6,
+  perBlockedDamage: 0.8,
+  perDamageTaken: 0.8,
+  /** Both fists within this window, with a full meter, launch the special (seconds). */
+  doubleWindow: 0.22,
+})
+
 export const COMBAT_RULES = Object.freeze({
   fixedStep: 1 / 60,
   maxFrameTime: 0.25,

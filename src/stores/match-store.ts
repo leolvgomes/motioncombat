@@ -8,7 +8,7 @@ export const READY_MATCH: CombatSnapshot = Object.freeze({
   mode: 'webcam', phase: 'ready', pauseReason: null, round: 1,
   secondsLeft: 45, countdown: 0, betweenRoundsLeft: 0,
   playerHealth: 100, opponentHealth: 100, playerWins: 0, opponentWins: 0,
-  roundWinner: null, winner: null, lastImpact: null, lastCombo: null, playerStreak: 0, opponentStreak: 0, playerStats: noStats, opponentStats: noStats,
+  roundWinner: null, winner: null, lastImpact: null, lastCombo: null, playerStreak: 0, opponentStreak: 0, playerOverdrive: 0, opponentOverdrive: 0, playerStats: noStats, opponentStats: noStats,
 })
 
 export interface OpponentCue {

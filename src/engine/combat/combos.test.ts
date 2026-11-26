@@ -75,7 +75,7 @@ describe('hook and uppercut clips', () => {
     const rotations = Object.fromEntries(RIG_JOINTS.map((name) => [name, new Quaternion(...sample.pose[name])])) as CombatRotations
     return new CombatHitGeometry().fist({
       position: [0, 0, 0], yaw: 0, rotations, action: 'attacking', attackSide: side, attackKind: kind,
-      attackProgress: 0, hitActive: true, hitFlash: 0, blocking: false,
+      attackProgress: 0, hitActive: true, hitFlash: 0, blocking: false, special: false,
     }, side, new Vector3())
   }
 

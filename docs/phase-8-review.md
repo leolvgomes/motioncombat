@@ -40,6 +40,25 @@ Chrome nesta máquina, build de produção, arena aberta e qualidade Leve. A câ
 
 As medidas do corpo usam x e y normalizados sem corrigir a proporção do vídeo. Em 16:9, tudo na vertical fica esticado em 1,78×. Os limiares que você aprovou foram ajustados nessa métrica, então corrigi-la agora poderia piorar o que funciona. A variante **Proporção corrigida** mede o efeito antes de decidir.
 
+## Resultado da aferição com webcam (26/11/2026)
+
+Sessão completa, 22 Hz, rastreamento na página, cena a 33 FPS e atraso médio da pose de 27 ms.
+
+| Golpe | Ao vivo | Após o ajuste |
+| --- | --- | --- |
+| Soco reto esquerdo | 1/5 | 4/5 |
+| Soco reto direito | 1/5 | 5/5 |
+| Gancho/cruzado e uppercut | 2/20 | 2/20 |
+| Esquivas | 4/6 | 4/6 |
+| Golpes indevidos | 0 | 0 |
+
+- O cotovelo nos socos reais chegou a 2,06–2,70 rad; o limite de 2,3 recusava a maioria. Passou para 2,0.
+- Com a guarda baixa, o soco sobe até a altura da cabeça (1,5 na métrica atual). O teto passou de 1,2 para 1,8.
+- Socos que começam na altura do peito eram lidos como uppercut. O uppercut agora precisa descer abaixo de −0,8.
+- Nas repetições de "Gancho", o braço fez de baixo para cima; nas de "Uppercut", abriu para o lado e voltou ao centro. No boxe brasileiro "gancho" costuma ser o uppercut, então o golpe lateral passou a se chamar **cruzado** em todo o jogo, e a aferição descreve o caminho do punho.
+- As regras de cruzado e uppercut não foram ajustadas: sem saber qual golpe foi feito em cada repetição, ajustá-las seria adivinhar. Falta uma nova aferição com os nomes novos.
+- A variante com proporção corrigida não ajudou (22%), então a métrica atual foi mantida.
+
 ## Verificações executadas
 
 | Verificação | Resultado |

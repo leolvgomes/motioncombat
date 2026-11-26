@@ -69,11 +69,13 @@ const PUNCH_COOLDOWN_MS = 350
 // Gain over window sets the slowest accepted punch: 0.5 reach per second.
 const PUNCH_WINDOW_MS = 400
 const PUNCH_REACH = 0.8
-const PUNCH_ELBOW_ANGLE = 2.3
+// Measured 25/11/2026: real jabs peaked at 2.06–2.70 rad; 2.3 rejected most of them.
+const PUNCH_ELBOW_ANGLE = 2.0
 const MIN_REACH_GAIN = 0.2
 const RELEASE_DROP = 0.12
 const PUNCH_LOWEST_WRIST = -0.6
-const PUNCH_HIGHEST_WRIST = 1.2
+// Head-height punches reached 1.5 in the uncorrected (vertically stretched) image metric.
+const PUNCH_HIGHEST_WRIST = 1.8
 const SWING_WINDOW_MS = 380
 // A fighting stance keeps the other fist up; a hanging arm means an everyday gesture.
 const SWING_SUPPORT_LOWEST_WRIST = -0.7
@@ -86,7 +88,8 @@ const HOOK_TRAVEL = 0.5
 const HOOK_LOWEST_ORIGIN = -0.6
 const HOOK_LOWEST_WRIST = -0.45
 const HOOK_HIGHEST_WRIST = 0.8
-const UPPERCUT_ORIGIN = -0.3
+// A low guard throws straight punches upward from about -0.5; an uppercut must dip clearly lower.
+const UPPERCUT_ORIGIN = -0.8
 const UPPERCUT_END = 0.15
 const UPPERCUT_RISE = 0.6
 const UPPERCUT_WRIST_ABOVE_ELBOW = 0.2
@@ -156,6 +159,8 @@ export class GestureEngine {
   private pendingPosture: GesturePosture = 'neutral'
   private pendingSince = 0
   private postureCooldownUntil = 0
+  /** Both fists can land in one frame (a double punch); the second is delivered on the next update. */
+  private deferred: GestureEvent | null = null
 
   reset(): void {
     this.clearTracking()
@@ -195,12 +200,15 @@ export class GestureEngine {
     const leftPunch = this.punch(this.left, left, features, 'PUNCH_LEFT')
     const rightPunch = this.punch(this.right, right, features, 'PUNCH_RIGHT')
     const swing = context.advancedAttacks ? this.swings(left, right, features, leftPunch !== null || rightPunch !== null) : null
-    const punch = leftPunch ?? rightPunch ?? swing
+    const queued = this.deferred
+    this.deferred = leftPunch && rightPunch ? rightPunch : null
+    const punch = leftPunch ?? rightPunch ?? queued ?? swing
     const postureEvent = this.updatePosture(features, left, right, context.profile, punch === null)
     return this.snapshot(punch ?? postureEvent)
   }
 
   private clearTracking(): void {
+    this.deferred = null
     clearArm(this.left)
     clearArm(this.right)
     this.previousTimestamp = null

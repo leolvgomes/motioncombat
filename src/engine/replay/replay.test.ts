@@ -14,7 +14,7 @@ const meta = (id = 'match', mode: ReplayMeta['mode'] = 'demo', recordedAt = 1000
   id, recordedAt, mode, name: 'ATLAS-01', look: sanitizeLook(null), arena: 'harbor',
 })
 
-interface Sample { time: number; health: [number, number]; frames: Record<FighterId, { position: number[]; shoulder: Quaternion }> }
+interface Sample { time: number; round: number; health: [number, number]; frames: Record<FighterId, { position: number[]; shoulder: Quaternion }> }
 
 /** A complete AI match recorded at the given display rate, with the live state kept for comparison. */
 function recordMatch(fps = 60, { pauseAt = -1, id = 'match' } = {}): { replay: Replay; samples: Sample[]; events: CombatEvent[]; engine: CombatEngine } {
@@ -45,7 +45,7 @@ function recordMatch(fps = 60, { pauseAt = -1, id = 'match' } = {}): { replay: R
     events.push(...drained.filter(({ type }) => type !== 'countdown'))
     if (engine.snapshot.phase !== 'countdown') {
       time = time < 0 ? 0 : time + 1 / fps
-      samples.push({ time, health: [engine.snapshot.playerHealth, engine.snapshot.opponentHealth], frames: { player: copy(engine.fighters.player), opponent: copy(engine.fighters.opponent) } })
+      samples.push({ time, round: engine.snapshot.round, health: [engine.snapshot.playerHealth, engine.snapshot.opponentHealth], frames: { player: copy(engine.fighters.player), opponent: copy(engine.fighters.opponent) } })
     }
   }
   const replay = recorder.finish()
@@ -93,7 +93,9 @@ describe('ReplayPlayer', () => {
     const { replay, samples } = recorded
     const player = new ReplayPlayer(replay)
     let worst = 0
-    for (const sample of samples.filter((_, index) => index % 37 === 0)) {
+    // A round change is written with the next sampled frame, so up to one replay interval still shows the old round.
+    const settled = (sample: Sample, index: number) => samples.slice(Math.max(0, index - 3), index).every(({ round }) => round === sample.round)
+    for (const sample of samples.filter((sample, index) => index % 37 === 0 && settled(sample, index))) {
       player.seek(sample.time)
       for (const id of ['player', 'opponent'] as const) {
         // Round changes teleport the fighters; interpolation never crosses them.

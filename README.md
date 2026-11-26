@@ -1,6 +1,6 @@
 # STEEL SYNC — Motion Combat
 
-Jogo web de combate robótico controlado pelo corpo. As **fases 1 a 5** implementam webcam, rastreamento corporal, robôs 3D procedurais, calibração, gestos, animações híbridas e uma partida local contra IA, com arena, hitboxes, vida, defesa, rounds e resultado. A **fase 6** acrescenta polimento: faíscas e anéis de impacto, tremor de câmera, som procedural, narração para leitores de tela, atalhos de teclado e sugestão de qualidade por FPS. A **fase 7** acrescenta ganchos, uppercuts e combos, personalização do robô, três cenários, carreira com ranking local e replays de movimento. A **fase 8** trata desempenho e precisão: rastreamento em segundo plano, ritmo da cena conforme a GPU, filtro adaptativo e aferição guiada. O laboratório de movimento continua disponível; uma demonstração IA × IA permite observar o combate sem câmera.
+Jogo web de combate robótico controlado pelo corpo. As **fases 1 a 5** implementam webcam, rastreamento corporal, robôs 3D procedurais, calibração, gestos, animações híbridas e uma partida local contra IA, com arena, hitboxes, vida, defesa, rounds e resultado. A **fase 6** acrescenta polimento: faíscas e anéis de impacto, tremor de câmera, som procedural, narração para leitores de tela, atalhos de teclado e sugestão de qualidade por FPS. A **fase 7** acrescenta ganchos, uppercuts e combos, personalização do robô, três cenários, carreira com ranking local e replays de movimento. A **fase 8** trata desempenho e precisão: rastreamento em segundo plano, ritmo da cena conforme a GPU, filtro adaptativo e aferição guiada. A **fase 9** trata o impacto visual: desgaste e fumaça conforme a vida cai, reação diferente para cada golpe, queda no nocaute com câmera lenta, o golpe especial Sobrecarga e brilho cinematográfico opcional. O laboratório de movimento continua disponível; uma demonstração IA × IA permite observar o combate sem câmera.
 
 ## Stack
 
@@ -232,6 +232,8 @@ A fase 7 acrescenta testes de combos, clips e contato dos novos golpes, reconhec
 
 A fase 8 acrescenta testes do Worker, do agendamento, do ritmo da cena, do filtro adaptativo, da aferição e da avaliação offline. Veja o [relatório da fase 8](docs/phase-8-review.md).
 
+A fase 9 acrescenta testes da Sobrecarga, do soco duplo, da reação por golpe, dos efeitos de dano e da câmera lenta. Veja o [relatório da fase 9](docs/phase-9-review.md).
+
 A resposta de ganchos e uppercuts com webcam permanece **pendente de revisão real**. A demonstração é identificada como programada e não preenche os indicadores da webcam com dados artificiais. O [relatório da fase 3](docs/phase-3-review.md) preserva o histórico da correção frontal.
 
 ## Limitações atuais
@@ -263,9 +265,10 @@ A resposta de ganchos e uppercuts com webcam permanece **pendente de revisão re
 5. **Arena e combate:** implementada; IA, contato, vida, defesa, rounds e resultados.
 6. **Polimento:** implementada; efeitos de impacto, som procedural, acessibilidade e sugestão de qualidade.
 7. **Expansões:** implementada; combos avançados, personalização, cenários, carreira, ranking local e replays. O multiplayer online fica para uma fase própria, com backend.
-8. **Desempenho e precisão:** implementação atual para revisão; a calibração final dos limiares depende da sua aferição.
+8. **Desempenho e precisão:** implementada; socos retos ajustados com a aferição de 26/11/2026. Cruzado e uppercut aguardam nova aferição com os nomes novos.
+9. **Impacto visual:** implementação atual para revisão.
 
-O desenvolvimento está interrompido na fase 8 para revisão antes do commit e coleta da aferição. Sugestão de commit: `feat: add background tracking, frame pacing and guided gesture trials`.
+O desenvolvimento está interrompido na fase 9 para revisão antes do commit. Sugestão de commit: `feat: add battle damage, knockout cinematics and overdrive special`.
 
 ## Referências técnicas
 

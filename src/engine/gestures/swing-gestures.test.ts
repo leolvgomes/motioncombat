@@ -16,7 +16,8 @@ const profile: CalibrationProfile = {
 const context: GestureContext = { enabled: true, calibrating: false, profile, advancedAttacks: true }
 const GUARD: Point = [0.35, 0.5]
 const HOOK: readonly Point[] = [GUARD, [0.6, 0.35], [0.85, 0.25], [0.55, 0.22], [0.2, 0.2], [0, 0.2], [0.2, 0.35], GUARD]
-const UPPERCUT: readonly Point[] = [GUARD, [0.35, 0.1], [0.35, -0.45], [0.32, -0.1], [0.3, 0.35], [0.3, 0.7], GUARD]
+// Measured uppercuts dip well below the chest before rising (25/11/2026 trial).
+const UPPERCUT: readonly Point[] = [GUARD, [0.35, 0.1], [0.35, -0.5], [0.35, -0.95], [0.33, -0.45], [0.3, 0.1], [0.3, 0.7], GUARD]
 
 const signOf = (side: Side) => side === 'left' ? 1 : -1
 

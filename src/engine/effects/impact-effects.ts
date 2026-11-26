@@ -174,6 +174,7 @@ export function impactFeedback(event: ImpactCombatEvent, mode: MatchMode): Impac
   if (impact.result !== 'hit' && impact.result !== 'blocked') return { burst: null, amount: 0, shake: 0, direction }
   const knockout = event.defenderHealth <= 0
   const playerHurt = mode === 'webcam' && impact.attacker === 'opponent'
-  if (impact.result === 'blocked') return { burst: 'blocked', amount: knockout ? 1.2 : 0.6, shake: knockout ? 0.6 : 0.12, direction }
-  return { burst: 'hit', amount: knockout ? 1.8 : 1, shake: knockout ? 0.85 : playerHurt ? 0.5 : 0.3, direction }
+  const special = impact.special === true
+  if (impact.result === 'blocked') return { burst: 'blocked', amount: knockout ? 1.2 : special ? 1.1 : 0.6, shake: knockout ? 0.6 : special ? 0.4 : 0.12, direction }
+  return { burst: 'hit', amount: knockout || special ? 1.8 : 1, shake: knockout ? 0.85 : special ? 0.7 : playerHurt ? 0.5 : 0.3, direction }
 }

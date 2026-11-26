@@ -6,6 +6,10 @@ export interface FeedbackSettings {
   volume: number
   effectsEnabled: boolean
   shakeEnabled: boolean
+  /** Slow motion and close-up on the final blow. */
+  cinematicEnabled: boolean
+  /** Optional bloom post-processing; costly on integrated graphics. */
+  bloomEnabled: boolean
 }
 
 interface SettingsStore extends FeedbackSettings {
@@ -13,11 +17,13 @@ interface SettingsStore extends FeedbackSettings {
   setVolume: (volume: number) => void
   setEffectsEnabled: (enabled: boolean) => void
   setShakeEnabled: (enabled: boolean) => void
+  setCinematicEnabled: (enabled: boolean) => void
+  setBloomEnabled: (enabled: boolean) => void
 }
 
 export const SETTINGS_STORAGE_KEY = 'steel-sync:feedback:v1'
 export const DEFAULT_FEEDBACK: Readonly<FeedbackSettings> = Object.freeze({
-  soundEnabled: true, volume: 0.7, effectsEnabled: true, shakeEnabled: true,
+  soundEnabled: true, volume: 0.7, effectsEnabled: true, shakeEnabled: true, cinematicEnabled: true, bloomEnabled: false,
 })
 
 function clampVolume(value: unknown): number {
@@ -29,13 +35,15 @@ export function parseFeedbackSettings(raw: string | null): FeedbackSettings {
   let value: unknown = null
   try { value = raw ? JSON.parse(raw) : null } catch { value = null }
   const stored = value && typeof value === 'object' ? value as Record<string, unknown> : {}
-  const flag = (key: 'soundEnabled' | 'effectsEnabled' | 'shakeEnabled') =>
+  const flag = (key: 'soundEnabled' | 'effectsEnabled' | 'shakeEnabled' | 'cinematicEnabled' | 'bloomEnabled') =>
     typeof stored[key] === 'boolean' ? stored[key] as boolean : DEFAULT_FEEDBACK[key]
   return {
     soundEnabled: flag('soundEnabled'),
     volume: 'volume' in stored ? clampVolume(stored.volume) : DEFAULT_FEEDBACK.volume,
     effectsEnabled: flag('effectsEnabled'),
     shakeEnabled: flag('shakeEnabled'),
+    cinematicEnabled: flag('cinematicEnabled'),
+    bloomEnabled: flag('bloomEnabled'),
   }
 }
 
@@ -52,8 +60,8 @@ function save(settings: FeedbackSettings): void {
 export const useSettingsStore = create<SettingsStore>((set, get) => {
   const update = (patch: Partial<FeedbackSettings>) => {
     set(patch)
-    const { soundEnabled, volume, effectsEnabled, shakeEnabled } = get()
-    save({ soundEnabled, volume, effectsEnabled, shakeEnabled })
+    const { soundEnabled, volume, effectsEnabled, shakeEnabled, cinematicEnabled, bloomEnabled } = get()
+    save({ soundEnabled, volume, effectsEnabled, shakeEnabled, cinematicEnabled, bloomEnabled })
   }
   return {
     ...load(),
@@ -61,5 +69,7 @@ export const useSettingsStore = create<SettingsStore>((set, get) => {
     setVolume: (volume) => update({ volume: clampVolume(volume) }),
     setEffectsEnabled: (effectsEnabled) => update({ effectsEnabled }),
     setShakeEnabled: (shakeEnabled) => update({ shakeEnabled }),
+    setCinematicEnabled: (cinematicEnabled) => update({ cinematicEnabled }),
+    setBloomEnabled: (bloomEnabled) => update({ bloomEnabled }),
   }
 })

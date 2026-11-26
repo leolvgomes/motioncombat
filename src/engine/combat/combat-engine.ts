@@ -4,10 +4,10 @@ import type { AttackKind, AttackSide } from '../../types/animation'
 import type { CombatEvent, CombatInput, CombatSnapshot, FighterFrame, FighterId, ImpactEvent, MatchMode, MatchWinner, PauseReason } from '../../types/combat'
 import { CombatFighter } from './fighter'
 import { CombatHitGeometry } from './collision'
-import { ATTACK_RULES, COMBAT_RULES } from './config'
+import { ATTACK_RULES, COMBAT_RULES, OVERDRIVE_RULES, SPECIAL_RULES } from './config'
 
 type MutableSnapshot = { -readonly [Key in keyof CombatSnapshot]: CombatSnapshot[Key] }
-interface Resolution { result: ImpactEvent['result']; pending: boolean; kind: AttackKind; side: AttackSide; readonly position: Vector3 }
+interface Resolution { result: ImpactEvent['result']; pending: boolean; kind: AttackKind; side: AttackSide; special: boolean; readonly position: Vector3 }
 
 const MAX_PENDING_EVENTS = 64
 
@@ -23,8 +23,8 @@ export class CombatEngine {
   private readonly opponent: CombatFighter
   private readonly frameRecord: Record<FighterId, FighterFrame>
   private readonly geometry = new CombatHitGeometry()
-  private readonly playerResolution: Resolution = { pending: false, result: 'miss', kind: 'straight', side: 'left', position: new Vector3() }
-  private readonly opponentResolution: Resolution = { pending: false, result: 'miss', kind: 'straight', side: 'left', position: new Vector3() }
+  private readonly playerResolution: Resolution = { pending: false, result: 'miss', kind: 'straight', side: 'left', special: false, position: new Vector3() }
+  private readonly opponentResolution: Resolution = { pending: false, result: 'miss', kind: 'straight', side: 'left', special: false, position: new Vector3() }
   private readonly events: CombatEvent[] = []
   private readonly state: MutableSnapshot
   private accumulator = 0
@@ -45,7 +45,7 @@ export class CombatEngine {
       mode: 'webcam', phase: 'ready', pauseReason: null, round: 1, secondsLeft: COMBAT_RULES.roundSeconds,
       countdown: 0, betweenRoundsLeft: 0, playerHealth: COMBAT_RULES.health, opponentHealth: COMBAT_RULES.health,
       playerWins: 0, opponentWins: 0, roundWinner: null, winner: null, lastImpact: null,
-      lastCombo: null, playerStreak: 0, opponentStreak: 0,
+      lastCombo: null, playerStreak: 0, opponentStreak: 0, playerOverdrive: 0, opponentOverdrive: 0,
       playerStats: this.player.stats, opponentStats: this.opponent.stats,
     }
   }
@@ -126,7 +126,7 @@ export class CombatEngine {
       mode: 'webcam', phase: 'ready', pauseReason: null, round: 1, secondsLeft: COMBAT_RULES.roundSeconds,
       countdown: 0, betweenRoundsLeft: 0, playerHealth: COMBAT_RULES.health, opponentHealth: COMBAT_RULES.health,
       playerWins: 0, opponentWins: 0, roundWinner: null, winner: null, lastImpact: null,
-      lastCombo: null, playerStreak: 0, opponentStreak: 0,
+      lastCombo: null, playerStreak: 0, opponentStreak: 0, playerOverdrive: 0, opponentOverdrive: 0,
     })
     this.accumulator = 0
     this.consumedSequence = -1
@@ -175,6 +175,11 @@ export class CombatEngine {
     if (!requested) return
     const humanLeft = requested.side === 'left'
     const side = (input.mirrored ? !humanLeft : humanLeft) ? 'left' : 'right'
+    if (this.player.upgradeToSpecial(side)) {
+      this.syncStreaks()
+      this.emit({ type: 'special', fighter: 'player', side: this.player.attack!.side })
+      return
+    }
     if (this.player.beginAttack(side, requested.kind)) this.emit({ type: 'attack', fighter: 'player', side, kind: requested.kind })
   }
 
@@ -232,6 +237,8 @@ export class CombatEngine {
   private syncStreaks(): void {
     this.state.playerStreak = this.player.combo.streak
     this.state.opponentStreak = this.opponent.combo.streak
+    this.state.playerOverdrive = this.player.overdrive
+    this.state.opponentOverdrive = this.opponent.overdrive
   }
 
   private updatePlayerPosture(input: CombatInput, dt: number): void {
@@ -264,7 +271,14 @@ export class CombatEngine {
       fighter.anchorZ += toward * decision.movement * amount
       fighter.anchorZ = fighter.id === 'player' ? Math.max(-0.95, Math.min(0.4, fighter.anchorZ)) : Math.max(0.45, Math.min(1.8, fighter.anchorZ))
     }
-    if (decision.attack && fighter.beginAttack(decision.attack, decision.attackKind)) this.emit({ type: 'attack', fighter: fighter.id, side: decision.attack, kind: decision.attackKind })
+    if (decision.attack) {
+      // The AI spends a full meter on its next attack.
+      const special = fighter.overdriveReady
+      if (fighter.beginAttack(decision.attack, decision.attackKind, special)) {
+        this.emit({ type: 'attack', fighter: fighter.id, side: decision.attack, kind: decision.attackKind })
+        if (special) this.emit({ type: 'special', fighter: fighter.id, side: decision.attack })
+      }
+    }
   }
 
   private checkAttack(attacker: CombatFighter, defender: CombatFighter, resolution: Resolution): void {
@@ -273,6 +287,7 @@ export class CombatEngine {
     if (!attack || attack.resolved) return
     resolution.kind = attack.kind
     resolution.side = attack.side
+    resolution.special = attack.special
     const window = attack.sampler.hitWindow
     const start = Math.max(attack.previousElapsed, window.start)
     const end = Math.min(attack.elapsed, window.end)
@@ -297,11 +312,14 @@ export class CombatEngine {
   private applyResolution(attacker: CombatFighter, defender: CombatFighter, resolution: Resolution): void {
     if (!resolution.pending) return
     const result = resolution.result
-    const rules = ATTACK_RULES[resolution.kind]
+    const rules = resolution.special ? SPECIAL_RULES : ATTACK_RULES[resolution.kind]
     const combo = result === 'hit' ? attacker.combo.land(resolution) : null
     let damage = 0
     if (result === 'hit' || result === 'blocked') {
-      damage = defender.takeDamage(result === 'blocked' ? rules.blockedDamage : rules.damage + (combo?.bonus ?? 0))
+      damage = defender.takeDamage(result === 'blocked' ? rules.blockedDamage : rules.damage + (combo?.bonus ?? 0), resolution.kind, resolution.side)
+      // Spending the meter never refills it on the same blow.
+      if (!resolution.special) attacker.gainOverdrive(damage * (result === 'hit' ? OVERDRIVE_RULES.perHitDamage : OVERDRIVE_RULES.perBlockedDamage))
+      defender.gainOverdrive(damage * OVERDRIVE_RULES.perDamageTaken)
       attacker.stats.damage += damage
       if (result === 'hit') {
         attacker.stats.hits += 1
@@ -310,7 +328,7 @@ export class CombatEngine {
       } else defender.stats.blocks += 1
     } else if (result === 'dodged') defender.stats.dodges += 1
     if (result !== 'hit') attacker.combo.break()
-    const impact: ImpactEvent = { id: ++this.impactSequence, attacker: attacker.id, kind: resolution.kind, result, damage }
+    const impact: ImpactEvent = { id: ++this.impactSequence, attacker: attacker.id, kind: resolution.kind, result, damage, special: resolution.special }
     this.state.lastImpact = impact
     const { x, y, z } = resolution.position
     this.emit({ type: 'impact', impact: { ...impact }, position: [x, y, z], defenderHealth: defender.health })

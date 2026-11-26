@@ -8,7 +8,7 @@ import { createRestPose, sampleDemoPose } from '../motion/retarget'
 import { CombatAI } from './ai'
 import { CombatHitGeometry } from './collision'
 import { ComboTracker } from './combos'
-import { ATTACK_RULES, COMBAT_RULES } from './config'
+import { ATTACK_RULES, COMBAT_RULES, OVERDRIVE_RULES, SPECIAL_RULES } from './config'
 
 type MutableFrame = { -readonly [Key in keyof FighterFrame]: Key extends 'position' ? [number, number, number]
   : Key extends 'rotations' ? CombatRotations : FighterFrame[Key] }
@@ -23,6 +23,7 @@ export interface FighterAttack {
   previousElapsed: number
   resolved: boolean
   dodged: boolean
+  special: boolean
 }
 
 const X_AXIS = new Vector3(1, 0, 0)
@@ -36,7 +37,7 @@ function rotations(pose: RigPose): CombatRotations {
 function frame(pose: RigPose, yaw: number): MutableFrame {
   return {
     position: [0, 0, 0], yaw, rotations: rotations(pose), action: 'idle',
-    attackSide: null, attackKind: null, attackProgress: 0, hitActive: false, hitFlash: 0, blocking: false,
+    attackSide: null, attackKind: null, attackProgress: 0, hitActive: false, hitFlash: 0, blocking: false, special: false,
   }
 }
 
@@ -61,6 +62,8 @@ export class CombatFighter {
   readonly mask = Object.fromEntries(RIG_JOINTS.map((name) => [name, 0])) as Record<RigJointName, number>
   brain: CombatAI
   health: number = COMBAT_RULES.health
+  /** 0–OVERDRIVE_RULES.max; kept between rounds, cleared with the match. */
+  overdrive = 0
   anchorZ = 0
   dodge = 0
   stun = 0
@@ -78,6 +81,9 @@ export class CombatFighter {
   private base: Readonly<CombatRotations>
   private outcome: 'victory' | 'defeat' | null = null
   private outcomeElapsed = 0
+  /** The blow that caused the current stun shapes the recoil. */
+  private recoilKind: AttackKind = 'straight'
+  private recoilSide: AttackSide = 'left'
 
   constructor(readonly id: FighterId, seed: number) {
     this.yawSign = id === 'player' ? 1 : -1
@@ -106,7 +112,10 @@ export class CombatFighter {
     this.blocking = false
     this.telegraphSide = null
     this.combo.break()
-    if (clearStats) for (const key of ['attacks', 'hits', 'blocks', 'dodges', 'damage', 'combos', 'bestStreak'] as const) this.stats[key] = 0
+    if (clearStats) {
+      for (const key of ['attacks', 'hits', 'blocks', 'dodges', 'damage', 'combos', 'bestStreak'] as const) this.stats[key] = 0
+      this.overdrive = 0
+    }
     this.clearMask()
     this.frame.position[0] = 0
     this.frame.position[1] = 0
@@ -118,18 +127,38 @@ export class CombatFighter {
     this.frame.attackProgress = 0
     this.frame.action = 'idle'
     this.frame.blocking = false
+    this.frame.special = false
     for (const name of RIG_JOINTS) this.frame.rotations[name].copy(this.guard[name])
   }
 
   get available(): boolean { return this.health > 0 && !this.attack && this.stun <= 0 && this.returning <= 0 }
+  get overdriveReady(): boolean { return this.overdrive >= OVERDRIVE_RULES.max }
 
-  beginAttack(side: AttackSide, kind: AttackKind = 'straight'): boolean {
-    if (!this.available) return false
-    this.attack = { side, kind, shoulder: `${side}Shoulder`, sampler: createPunchClipSampler(side, undefined, kind), elapsed: 0, previousElapsed: 0, resolved: false, dodged: false }
+  gainOverdrive(amount: number): void {
+    if (Number.isFinite(amount) && amount > 0) this.overdrive = Math.min(OVERDRIVE_RULES.max, this.overdrive + amount)
+  }
+
+  beginAttack(side: AttackSide, kind: AttackKind = 'straight', special = false): boolean {
+    if (!this.available || special && !this.overdriveReady) return false
+    if (special) this.overdrive = 0
+    this.attack = { side, kind, shoulder: `${side}Shoulder`, sampler: createPunchClipSampler(side, undefined, kind), elapsed: 0, previousElapsed: 0, resolved: false, dodged: false, special }
     this.blocking = false
     this.telegraphSide = null
     this.stats.attacks += 1
     this.clearMask()
+    return true
+  }
+
+  /**
+   * The second fist of a double punch: with a full meter, an attack that has just begun becomes the special.
+   * The other arm must start it, and before the first one lands.
+   */
+  upgradeToSpecial(side: AttackSide): boolean {
+    const attack = this.attack
+    if (!attack || attack.special || attack.side === side || !this.overdriveReady
+      || attack.elapsed > OVERDRIVE_RULES.doubleWindow || attack.elapsed >= attack.sampler.hitWindow.start) return false
+    attack.special = true
+    this.overdrive = 0
     return true
   }
 
@@ -173,8 +202,9 @@ export class CombatFighter {
     this.telegraphSide = null
   }
 
-  takeDamage(damage: number): number {
+  takeDamage(damage: number, kind: AttackKind = 'straight', side: AttackSide = 'left'): number {
     const actual = Math.min(this.health, Math.max(0, damage))
+    if (actual > 0) { this.recoilKind = kind; this.recoilSide = side }
     this.health -= actual
     this.frame.hitFlash = actual > 0 ? 1 : this.frame.hitFlash
     this.stun = actual > 0 ? COMBAT_RULES.stunSeconds : this.stun
@@ -206,6 +236,7 @@ export class CombatFighter {
     target.hitActive = this.attack !== null && !this.attack.resolved
       && this.attack.elapsed >= this.attack.sampler.hitWindow.start && this.attack.elapsed < this.attack.sampler.hitWindow.end
     target.blocking = !this.attack && this.stun <= 0 && this.blocking
+    target.special = this.attack?.special === true
   }
 
   fistAt(time: number, geometry: CombatHitGeometry, out: Vector3): Vector3 {
@@ -231,7 +262,7 @@ export class CombatFighter {
           target.rotations[name].slerp(this.scratch, weight)
         }
       }
-      lunge = ATTACK_RULES[this.attack.kind].lunge * (sample.weights[this.attack.shoulder] ?? 0)
+      lunge = (this.attack.special ? SPECIAL_RULES : ATTACK_RULES[this.attack.kind]).lunge * (sample.weights[this.attack.shoulder] ?? 0)
     } else if (this.returning > 0) {
       const remaining = this.returning / COMBAT_RULES.returnSeconds
       const strength = remaining * remaining * (3 - 2 * remaining)
@@ -250,7 +281,11 @@ export class CombatFighter {
     }
     if (this.stun > 0) {
       const recoil = Math.sin(Math.PI * (1 - this.stun / COMBAT_RULES.stunSeconds)) * 0.12
-      target.rotations.torso.multiply(this.scratch.setFromAxisAngle(X_AXIS, -recoil))
+      // A straight snaps the head back, a cruzado turns it away from the fist, an uppercut lifts the chin.
+      const turn = this.recoilSide === 'left' ? -1 : 1
+      target.rotations.torso.multiply(this.scratch.setFromAxisAngle(X_AXIS, -recoil * (this.recoilKind === 'hook' ? 0.5 : 1)))
+      if (this.recoilKind === 'hook') target.rotations.head.multiply(this.scratch.setFromAxisAngle(Y_AXIS, turn * recoil * 3))
+      else target.rotations.head.multiply(this.scratch.setFromAxisAngle(X_AXIS, -recoil * (this.recoilKind === 'uppercut' ? 2.6 : 1.3)))
     } else if (this.telegraphSide && !this.attack) {
       const side = this.telegraphSide === 'left' ? 1 : -1
       // Each attack announces itself with a different readable wind-up.

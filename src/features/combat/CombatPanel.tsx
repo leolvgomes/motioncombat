@@ -12,7 +12,7 @@ import { useRobotStore } from '../../stores/robot-store'
 import type { RobotQuality } from '../../stores/robot-store'
 import { useSettingsStore } from '../../stores/settings-store'
 import type { ArenaId } from '../../types/customization'
-import type { ComboEvent, CombatSnapshot, FighterStats, ImpactEvent, PauseReason } from '../../types/combat'
+import type { ComboEvent, CombatSnapshot, FighterId, FighterStats, ImpactEvent, PauseReason } from '../../types/combat'
 import { combatAudio, cueFighter, cueForEvent } from '../audio/combat-audio'
 import { ARENAS, OPPONENT_NAME, sanitizeName } from '../customization/catalog'
 import { announcementForEvent } from './announcements'
@@ -66,7 +66,7 @@ function winnerLabel(snapshot: CombatSnapshot, names: FighterNames): string {
   return snapshot.mode === 'webcam' && snapshot.winner === 'player' ? `Vitória de ${names.player}` : `${names[snapshot.winner]} venceu`
 }
 
-const impactNouns = { straight: 'soco', hook: 'gancho', uppercut: 'uppercut' } as const
+const impactNouns = { straight: 'soco', hook: 'cruzado', uppercut: 'uppercut' } as const
 
 function impactLabel(impact: ImpactEvent, names: FighterNames): string {
   const attacker = names[impact.attacker]
@@ -141,7 +141,7 @@ export function CombatPanel() {
   const names: FighterNames = { player: playback?.meta.name ?? robotName, opponent: OPPONENT_NAME }
   const quality = useRobotStore((state) => state.quality)
   const setQuality = useRobotStore((state) => state.setQuality)
-  const { soundEnabled, volume, effectsEnabled, shakeEnabled, setSoundEnabled, setVolume, setEffectsEnabled, setShakeEnabled } = useSettingsStore()
+  const { soundEnabled, volume, effectsEnabled, shakeEnabled, cinematicEnabled, bloomEnabled, setSoundEnabled, setVolume, setEffectsEnabled, setShakeEnabled, setCinematicEnabled, setBloomEnabled } = useSettingsStore()
   const reducedMotion = useReducedMotion()
   const announcement = useMatchAnnouncer()
   useCombatAudio()
@@ -161,6 +161,19 @@ export function CombatPanel() {
     const timer = window.setTimeout(() => setVisibleImpact(null), 1800)
     return () => window.clearTimeout(timer)
   }, [impactId])
+
+  const [visibleSpecial, setVisibleSpecial] = useState<{ id: number; fighter: FighterId } | null>(null)
+  useEffect(() => {
+    let timer = 0
+    let sequence = 0
+    const unsubscribe = matchRuntime.subscribe((event) => {
+      if (event.type !== 'special') return
+      window.clearTimeout(timer)
+      setVisibleSpecial({ id: ++sequence, fighter: event.fighter })
+      timer = window.setTimeout(() => setVisibleSpecial(null), 1500)
+    })
+    return () => { unsubscribe(); window.clearTimeout(timer) }
+  }, [])
 
   const [visibleCombo, setVisibleCombo] = useState<ComboEvent | null>(null)
   const comboId = snapshot.lastCombo?.id
@@ -225,11 +238,12 @@ export function CombatPanel() {
       {ready && !armed && <div className="combat-lobby-copy"><span>{names.player} × {names.opponent}</span><h3>Seu movimento.<br />Seu lugar no ringue.</h3><p>Calibre seu corpo e enfrente uma IA em uma melhor de três.</p></div>}
       {replaying ? null : paused ? <div className="combat-stage-banner" role="status"><Pause size={23} aria-hidden="true" /><h3>{snapshot.pauseReason === 'manual' ? 'Combate pausado' : snapshot.pauseReason === 'tracking' ? 'Você saiu do quadro' : 'Pausa de segurança'}</h3><p>{snapshot.pauseReason ? pauseMessages[snapshot.pauseReason] : ''}</p>{snapshot.pauseReason === 'tracking' && autoResume !== null ? <><div className="combat-auto-resume" aria-hidden="true"><span style={{ transform: `scaleX(${autoResume})` }} /></div><small>Guarda reconhecida · mantenha para voltar</small></> : <small>{snapshot.pauseReason === 'tracking' ? 'Ou use Retomar abaixo da arena.' : 'Use Retomar abaixo da arena para continuar.'}</small>}</div>
         : snapshot.phase === 'countdown' ? <div className="combat-countdown"><span>{demo ? 'INICIANDO DEMONSTRAÇÃO' : 'PREPARE A GUARDA'}</span><strong>{Math.max(1, Math.ceil(snapshot.countdown))}</strong></div>
-          : snapshot.phase === 'round-over' ? <div className="combat-stage-banner"><ShieldCheck size={26} aria-hidden="true" /><h3>{snapshot.roundWinner === 'draw' ? 'Round empatado' : `${snapshot.roundWinner ? names[snapshot.roundWinner] : ''} venceu o round`}</h3><p>Placar {snapshot.playerWins} × {snapshot.opponentWins}</p><small>{snapshot.betweenRoundsLeft > 0 ? `Próximo round em ${Math.ceil(snapshot.betweenRoundsLeft)} s` : 'Preparando o próximo round'}</small></div>
-            : finished && !armed && <div className={`combat-stage-banner is-result ${snapshot.winner === 'player' ? 'is-victory' : ''}`}><Trophy size={30} aria-hidden="true" /><span>{demo ? 'DEMONSTRAÇÃO CONCLUÍDA' : 'RESULTADO DA PARTIDA'}</span><h3>{winnerLabel(snapshot, names)}</h3><p>Placar final <strong>{snapshot.playerWins} × {snapshot.opponentWins}</strong></p>{matchRecord && <small>{matchRecord.score} pontos{rankPosition > 0 ? ` · ${rankPosition}º no ranking local` : ''}</small>}</div>}
+          : snapshot.phase === 'round-over' ? <div className="combat-stage-banner is-outcome"><ShieldCheck size={26} aria-hidden="true" /><h3>{snapshot.roundWinner === 'draw' ? 'Round empatado' : `${snapshot.roundWinner ? names[snapshot.roundWinner] : ''} venceu o round`}</h3><p>Placar {snapshot.playerWins} × {snapshot.opponentWins}</p><small>{snapshot.betweenRoundsLeft > 0 ? `Próximo round em ${Math.ceil(snapshot.betweenRoundsLeft)} s` : 'Preparando o próximo round'}</small></div>
+            : finished && !armed && <div className={`combat-stage-banner is-outcome is-result ${snapshot.winner === 'player' ? 'is-victory' : ''}`}><Trophy size={30} aria-hidden="true" /><span>{demo ? 'DEMONSTRAÇÃO CONCLUÍDA' : 'RESULTADO DA PARTIDA'}</span><h3>{winnerLabel(snapshot, names)}</h3><p>Placar final <strong>{snapshot.playerWins} × {snapshot.opponentWins}</strong></p>{matchRecord && <small>{matchRecord.score} pontos{rankPosition > 0 ? ` · ${rankPosition}º no ranking local` : ''}</small>}</div>}
       {/* Visual toast only; the live region below narrates the same events once. */}
       {visibleImpact && !ready && !finished && (!paused || replaying) && <div className={`combat-impact is-${visibleImpact.result}`} aria-hidden="true">{impactLabel(visibleImpact, names)}</div>}
       {visibleCombo && !ready && !finished && (!paused || replaying) && <div className={`combat-combo ${visibleCombo.fighter === 'opponent' ? 'is-opponent' : ''}`} aria-hidden="true"><span>{names[visibleCombo.fighter]}</span><strong>{comboById(visibleCombo.combo).name}</strong><small>COMBO · +{visibleCombo.bonus} DE DANO</small></div>}
+      {visibleSpecial && !ready && !finished && (!paused || replaying) && <div key={visibleSpecial.id} className={`combat-special ${visibleSpecial.fighter === 'opponent' ? 'is-opponent' : ''}`} aria-hidden="true"><small>{names[visibleSpecial.fighter]}</small><strong>SOBRECARGA</strong></div>}
       <div className="sr-only" aria-live="polite" aria-atomic="true">{announcement}</div>
       <div className={`combat-source-badge ${replaying || demo && !ready ? 'is-demo' : ''}`}>{replaying ? `Replay · ${demo ? 'demonstração IA × IA' : 'partida com webcam'}` : demo && !ready ? 'IA × IA · movimentos programados' : ready ? 'Controle corporal ou demonstração' : `Webcam · seus movimentos controlam ${names.player}`}</div>
     </div>
@@ -250,7 +264,11 @@ export function CombatPanel() {
       <label className="combat-volume"><span>Volume</span><input type="range" min={0} max={100} step={5} value={volumePercent} disabled={!soundEnabled} aria-valuetext={`${volumePercent}%`} onChange={(event) => setVolume(Number(event.target.value) / 100)} /><output aria-hidden="true">{volumePercent}%</output></label>
       <Toggle label="Faíscas de impacto" checked={effectsEnabled} onChange={() => setEffectsEnabled(!effectsEnabled)} />
       <Toggle label="Tremor de câmera" checked={shakeEnabled && !reducedMotion} onChange={() => setShakeEnabled(!shakeEnabled)} />
-      {reducedMotion && <small className="combat-feedback-note">Movimento reduzido ativo no sistema: o tremor fica desligado e as faíscas são atenuadas.</small>}
+      <Toggle label="Câmera lenta no nocaute" checked={cinematicEnabled && !reducedMotion} onChange={() => setCinematicEnabled(!cinematicEnabled)} />
+      <Toggle label="Brilho cinematográfico" checked={bloomEnabled && quality === 'balanced'} onChange={() => setBloomEnabled(!bloomEnabled)} />
+      {reducedMotion && <small className="combat-feedback-note">Movimento reduzido ativo no sistema: o tremor e a câmera lenta ficam desligados e as faíscas são atenuadas.</small>}
+      {bloomEnabled && quality === 'light' && <small className="combat-feedback-note">O brilho cinematográfico só funciona na qualidade Equilibrada.</small>}
+      {bloomEnabled && quality === 'balanced' && <small className="combat-feedback-note">O brilho pesa em placas de vídeo integradas. Desligue se o FPS da arena cair.</small>}
       <p className="combat-shortcuts"><Keyboard size={14} aria-hidden="true" />Atalhos: <kbd>P</kbd> pausar ou retomar · <kbd>M</kbd> ligar ou desligar o som</p>
     </div>
     {!replaying && (ready || paused && !demo && !canFight || finished && !demo && !canFight) && <p className="combat-readiness" role="status"><ShieldCheck size={14} aria-hidden="true" />{preparation}</p>}

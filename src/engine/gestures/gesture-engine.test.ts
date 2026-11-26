@@ -102,9 +102,9 @@ describe('GestureEngine punches from 2D reach', () => {
   })
 
   it.each([
-    ['a bent arm', 0.15, { reachAngle: 2.1 }],
+    ['a bent arm', 0.15, { reachAngle: 1.8 }],
     ['a hanging arm', 0.15, { wrist: { x: 0.35, y: -1.2, z: 0 } }],
-    ['an arm raised overhead', 0.15, { wrist: { x: 0.35, y: 1.6, z: 0 } }],
+    ['an arm raised overhead', 0.15, { wrist: { x: 0.35, y: 2.1, z: 0 } }],
     ['a small reach gain from a half-extended arm', 0.55, {}],
   ] as const)('rejects %s', (_label, start, change) => {
     const engine = new GestureEngine()
@@ -213,6 +213,18 @@ describe('GestureEngine reliability gates', () => {
     engine.reset()
     expect(engine.update(features(220), { ...context, enabled: false })).toEqual({ posture: 'neutral', event: null })
     expect(engine.update(features(260), context)).toEqual({ posture: 'neutral', event: null })
+  })
+})
+
+describe('GestureEngine double punch', () => {
+  it('delivers both fists when they extend in the same frame', () => {
+    const engine = new GestureEngine()
+    engine.update(features(0, { leftArm: extending('left', 0), rightArm: extending('right', 0) }), context)
+    const both = { leftArm: extending('left', 1), rightArm: extending('right', 1) }
+    const first = engine.update(features(40, both), context).event?.type
+    const second = engine.update(features(80, both), context).event?.type
+    expect([first, second]).toEqual(['PUNCH_LEFT', 'PUNCH_RIGHT'])
+    expect(engine.update(features(120, both), context).event).toBeNull()
   })
 })
 

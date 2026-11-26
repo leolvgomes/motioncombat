@@ -30,8 +30,9 @@ const EARLY_MS = 250
 
 const ATTACKS: readonly (readonly [TrialGesture, string])[] = [
   ['PUNCH_LEFT', 'Soco reto com a mão esquerda'], ['PUNCH_RIGHT', 'Soco reto com a mão direita'],
-  ['HOOK_LEFT', 'Gancho com a mão esquerda'], ['HOOK_RIGHT', 'Gancho com a mão direita'],
-  ['UPPERCUT_LEFT', 'Uppercut com a mão esquerda'], ['UPPERCUT_RIGHT', 'Uppercut com a mão direita'],
+  // "Gancho" means an uppercut to many Brazilian boxers; the side swing is named cruzado and both describe the path.
+  ['HOOK_LEFT', 'Cruzado com a mão esquerda: de fora para o centro'], ['HOOK_RIGHT', 'Cruzado com a mão direita: de fora para o centro'],
+  ['UPPERCUT_LEFT', 'Uppercut com a mão esquerda: de baixo para cima'], ['UPPERCUT_RIGHT', 'Uppercut com a mão direita: de baixo para cima'],
 ]
 const DODGES: readonly (readonly [TrialGesture, string])[] = [
   ['DODGE_LEFT', 'Incline o tronco para a sua esquerda'], ['DODGE_RIGHT', 'Incline o tronco para a sua direita'],

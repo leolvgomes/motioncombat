@@ -25,6 +25,8 @@ export interface FighterFrame {
   readonly hitActive: boolean
   readonly hitFlash: number
   readonly blocking: boolean
+  /** The running attack is an overdrive special. */
+  readonly special: boolean
 }
 
 export interface FighterStats {
@@ -52,6 +54,8 @@ export interface ImpactEvent {
   readonly kind: AttackKind
   readonly result: 'hit' | 'blocked' | 'dodged' | 'miss'
   readonly damage: number
+  /** Absent in replays recorded before the overdrive special existed. */
+  readonly special?: boolean
 }
 
 /** Discrete simulation events for presentation layers (sound, effects, announcements). Never fed back into rules. */
@@ -62,6 +66,8 @@ export type CombatEvent =
   | { readonly type: 'telegraph'; readonly fighter: FighterId; readonly side: AttackSide; readonly kind: AttackKind }
   | { readonly type: 'impact'; readonly impact: ImpactEvent; readonly position: readonly [number, number, number]; readonly defenderHealth: number }
   | { readonly type: 'combo'; readonly combo: ComboEvent }
+  /** A fighter spent a full overdrive meter on a special attack. */
+  | { readonly type: 'special'; readonly fighter: FighterId; readonly side: AttackSide }
   | { readonly type: 'round-end'; readonly round: number; readonly winner: MatchWinner; readonly knockout: boolean }
   | { readonly type: 'match-end'; readonly winner: MatchWinner; readonly mode: MatchMode }
 
@@ -83,6 +89,9 @@ export interface CombatSnapshot {
   readonly lastCombo: ComboEvent | null
   readonly playerStreak: number
   readonly opponentStreak: number
+  /** Overdrive meters, 0–100. A full meter allows one special attack. */
+  readonly playerOverdrive: number
+  readonly opponentOverdrive: number
   readonly playerStats: FighterStats
   readonly opponentStats: FighterStats
 }

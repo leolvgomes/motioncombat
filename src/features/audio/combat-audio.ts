@@ -1,6 +1,6 @@
 import type { CombatEvent, FighterId, MatchMode } from '../../types/combat'
 
-export type SoundCue = 'countdown' | 'fight' | 'swing' | 'hit' | 'knockout' | 'block' | 'dodge' | 'telegraph' | 'combo'
+export type SoundCue = 'countdown' | 'fight' | 'swing' | 'hit' | 'knockout' | 'block' | 'dodge' | 'telegraph' | 'combo' | 'special' | 'special-hit'
   | 'round-end' | 'victory' | 'defeat' | 'draw'
 
 /** Which sound, if any, a simulation event deserves. Pure, so the mapping is testable without audio. */
@@ -16,9 +16,11 @@ export function cueForEvent(event: CombatEvent, mode: MatchMode): SoundCue | nul
       if (result === 'miss') return null
       if (result === 'dodged') return 'dodge'
       if (event.defenderHealth <= 0) return 'knockout'
+      if (event.impact.special && result === 'hit') return 'special-hit'
       return result === 'blocked' ? 'block' : 'hit'
     }
     case 'combo': return 'combo'
+    case 'special': return 'special'
     case 'round-end': return 'round-end'
     case 'match-end':
       if (event.winner === 'draw') return 'draw'
@@ -31,6 +33,7 @@ export function cueFighter(event: CombatEvent): FighterId | null {
   if (event.type === 'attack' || event.type === 'telegraph') return event.fighter
   if (event.type === 'impact') return event.impact.attacker
   if (event.type === 'combo') return event.combo.fighter
+  if (event.type === 'special') return event.fighter
   return null
 }
 
@@ -171,6 +174,15 @@ export class CombatAudio {
       case 'telegraph':
         this.tone({ type: 'triangle', from: 1040, start: now, duration: 0.06, gain: 0.12 })
         return this.tone({ type: 'triangle', from: 1040, start: now + 0.09, duration: 0.06, gain: 0.12 })
+      case 'special':
+        // A rising charge with a bright edge: unmistakable, and different from the combo chime.
+        this.noise({ filter: 'bandpass', from: 400 * pitch, to: 4200 * pitch, q: 2.2, start: now, duration: 0.34, gain: 0.22 })
+        this.tone({ type: 'sawtooth', from: 180 * pitch, to: 720 * pitch, start: now, duration: 0.32, gain: 0.14 })
+        return this.tone({ type: 'triangle', from: 1480 * pitch, start: now + 0.2, duration: 0.24, gain: 0.12 })
+      case 'special-hit':
+        this.noise({ filter: 'lowpass', from: 4200, to: 260, start: now, duration: 0.42, gain: 0.6 })
+        this.tone({ type: 'square', from: 120 * pitch, to: 60, start: now, duration: 0.12, gain: 0.14 })
+        return this.tone({ type: 'sine', from: 190 * pitch, to: 40, start: now, duration: 0.5, gain: 0.85, attack: 0.002 })
       case 'combo': {
         let end = now
         ;[659.25, 880, 1174.66].forEach((frequency, index) => {

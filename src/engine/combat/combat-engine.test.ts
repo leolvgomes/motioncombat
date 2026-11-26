@@ -405,3 +405,87 @@ describe('rounds, AI matches and terminal poses', () => {
     expect(frames(match.engine)).toEqual(settled)
   })
 })
+
+describe('overdrive special', () => {
+  const fighterOf = (engine: CombatEngine) => (engine as unknown as { player: CombatFighter }).player
+
+  it('fills, clamps and only upgrades a fresh attack from the other fist', () => {
+    const fighter = new CombatFighter('player', 3)
+    fighter.gainOverdrive(60)
+    expect(fighter.beginAttack('left', 'straight', true)).toBe(false)
+    expect(fighter.beginAttack('left')).toBe(true)
+    expect(fighter.upgradeToSpecial('right')).toBe(false)
+    fighter.cancel()
+    fighter.advance(1)
+    fighter.gainOverdrive(Number.NaN)
+    fighter.gainOverdrive(500)
+    expect(fighter.overdrive).toBe(100)
+    expect(fighter.beginAttack('left')).toBe(true)
+    expect(fighter.upgradeToSpecial('left')).toBe(false)
+    fighter.advance(0.1)
+    expect(fighter.upgradeToSpecial('right')).toBe(true)
+    expect(fighter.attack?.special).toBe(true)
+    expect(fighter.overdrive).toBe(0)
+    expect(fighter.upgradeToSpecial('right')).toBe(false)
+  })
+
+  it('ignores a late second fist', () => {
+    const fighter = new CombatFighter('player', 3)
+    fighter.gainOverdrive(100)
+    fighter.beginAttack('left')
+    fighter.advance(0.3)
+    expect(fighter.upgradeToSpecial('right')).toBe(false)
+    expect(fighter.overdrive).toBe(100)
+  })
+
+  it('turns a double punch with a full meter into the special, which hits harder and does not refill', () => {
+    const match = new MatchHarness(0x51ee1)
+    match.until(() => match.engine.snapshot.phase === 'fighting')
+    const player = fighterOf(match.engine)
+    player.gainOverdrive(100)
+    match.engine.drainEvents()
+    match.fire('left')
+    match.fire('right')
+    const events = match.engine.drainEvents()
+    expect(events.filter(({ type }) => type === 'attack')).toHaveLength(1)
+    expect(events).toContainEqual({ type: 'special', fighter: 'player', side: 'left' })
+    expect(match.engine.snapshot.playerOverdrive).toBe(0)
+    let impact: Extract<ReturnType<CombatEngine['drainEvents']>[number], { type: 'impact' }> | undefined
+    for (let frame = 0; frame < 120 && !impact; frame++) {
+      match.tick()
+      if (frame === 0) expect(match.engine.fighters.player.special).toBe(true)
+      impact = match.engine.drainEvents().find((event) => event.type === 'impact' && event.impact.attacker === 'player') as typeof impact
+    }
+    expect(impact?.impact.special).toBe(true)
+    if (impact?.impact.result === 'hit') expect(impact.impact.damage).toBe(28)
+    if (impact?.impact.result === 'blocked') expect(impact.impact.damage).toBe(10)
+    expect(match.engine.snapshot.playerOverdrive).toBe(0)
+  })
+
+  it('lets both AIs earn and spend the meter in a demo match', () => {
+    const match = new MatchHarness(0x51ee1, 'demo')
+    const specials: string[] = []
+    for (let frame = 0; frame < 120 * 60 && match.engine.snapshot.phase !== 'finished'; frame++) {
+      match.tick()
+      for (const event of match.engine.drainEvents()) if (event.type === 'special') specials.push(event.fighter)
+      const { playerOverdrive, opponentOverdrive } = match.engine.snapshot
+      expect(playerOverdrive).toBeGreaterThanOrEqual(0)
+      expect(opponentOverdrive).toBeLessThanOrEqual(100)
+    }
+    expect(specials.length).toBeGreaterThan(0)
+  })
+
+  it('shapes the recoil by the blow that landed', () => {
+    const recoil = (kind: 'straight' | 'hook' | 'uppercut') => {
+      const fighter = new CombatFighter('opponent', 5)
+      fighter.compose()
+      const rest = fighter.frame.rotations.head.clone()
+      fighter.takeDamage(5, kind, 'left')
+      fighter.advance(0.13)
+      fighter.compose()
+      return fighter.frame.rotations.head.angleTo(rest)
+    }
+    expect(recoil('uppercut')).toBeGreaterThan(recoil('straight'))
+    expect(recoil('hook')).toBeGreaterThan(0.1)
+  })
+})

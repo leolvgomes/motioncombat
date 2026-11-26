@@ -25,6 +25,8 @@ const FIGHTERS: readonly FighterId[] = ['player', 'opponent']
 const ACTIONS: readonly FighterAction[] = ['idle', 'approaching', 'guard', 'telegraph', 'attacking', 'retreating', 'stunned', 'victory', 'defeat']
 const PHASES: readonly MatchPhase[] = ['ready', 'countdown', 'fighting', 'round-over', 'finished']
 const KINDS: readonly AttackKind[] = ['straight', 'hook', 'uppercut']
+/** Added to the attack-kind column for overdrive specials; older replays never use it. */
+const SPECIAL_CODE = KINDS.length
 
 export interface ReplayMeta {
   readonly id: string
@@ -87,7 +89,7 @@ function writeFrame(target: Int16Array, offset: number, elapsed: number, snapsho
     target[cursor++] = Math.max(0, ACTIONS.indexOf(frame.action))
     target[cursor++] = int16(frame.hitFlash * 1000)
     target[cursor++] = frame.attackSide === null ? 0 : frame.attackSide === 'left' ? 1 : 2
-    target[cursor++] = frame.attackKind === null ? 0 : KINDS.indexOf(frame.attackKind) + 1
+    target[cursor++] = frame.attackKind === null ? 0 : KINDS.indexOf(frame.attackKind) + 1 + (frame.special ? SPECIAL_CODE : 0)
   }
 }
 
@@ -187,7 +189,7 @@ function emptyFrame(id: FighterId): MutableFrame {
   return {
     position: [0, 0, 0], yaw: id === 'player' ? 0 : Math.PI,
     rotations: Object.fromEntries(RIG_JOINTS.map((name) => [name, new Quaternion()])) as CombatRotations,
-    action: 'idle', attackSide: null, attackKind: null, attackProgress: 0, hitActive: false, hitFlash: 0, blocking: false,
+    action: 'idle', attackSide: null, attackKind: null, attackProgress: 0, hitActive: false, hitFlash: 0, blocking: false, special: false,
   }
 }
 
@@ -214,7 +216,7 @@ export class ReplayPlayer {
     this.state = {
       mode: replay.meta.mode, phase: 'fighting', pauseReason: null, round: 1, secondsLeft: 0, countdown: 0, betweenRoundsLeft: 0,
       playerHealth: 0, opponentHealth: 0, playerWins: 0, opponentWins: 0, roundWinner: null, winner: null,
-      lastImpact: null, lastCombo: null, playerStreak: 0, opponentStreak: 0,
+      lastImpact: null, lastCombo: null, playerStreak: 0, opponentStreak: 0, playerOverdrive: 0, opponentOverdrive: 0,
       playerStats: replay.playerStats, opponentStats: replay.opponentStats,
     }
     this.seek(0)
@@ -316,7 +318,9 @@ export class ReplayPlayer {
       target.action = ACTIONS[frames[a + column]!] ?? 'idle'
       target.hitFlash = Math.max(0, Math.min(1, frames[a + column + 1]! / 1000))
       target.attackSide = sideOf(frames[a + column + 2]!)
-      target.attackKind = KINDS[frames[a + column + 3]! - 1] ?? null
+      const kindCode = frames[a + column + 3]!
+      target.attackKind = kindCode > 0 ? KINDS[(kindCode - 1) % SPECIAL_CODE] ?? null : null
+      target.special = kindCode > SPECIAL_CODE
       target.blocking = target.action === 'guard'
       offset += FIGHTER_COLUMNS
     }
@@ -371,6 +375,7 @@ function validEvent(event: Unknown): boolean {
     case 'impact': {
       const impact = record(event.impact)
       return impact !== null && number(impact.id) && fighter(impact.attacker) && kind(impact.kind) && number(impact.damage)
+        && (impact.special === undefined || typeof impact.special === 'boolean')
         && ['hit', 'blocked', 'dodged', 'miss'].includes(impact.result as string) && number(event.defenderHealth)
         && Array.isArray(event.position) && event.position.length === 3 && event.position.every(number)
     }
@@ -378,6 +383,7 @@ function validEvent(event: Unknown): boolean {
       const value = record(event.combo)
       return value !== null && number(value.id) && fighter(value.fighter) && combo(value.combo) && number(value.bonus)
     }
+    case 'special': return fighter(event.fighter) && side(event.side)
     case 'round-end': return number(event.round) && winnerOf(event.winner) && typeof event.knockout === 'boolean'
     case 'match-end': return winnerOf(event.winner) && (event.mode === 'webcam' || event.mode === 'demo')
     default: return false

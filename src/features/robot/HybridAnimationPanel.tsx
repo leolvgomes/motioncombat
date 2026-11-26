@@ -10,7 +10,7 @@ const stateLabels = {
   DODGE: 'Esquiva',
   PUNCH_LEFT: 'Soco esquerdo do robô',
   PUNCH_RIGHT: 'Soco direito do robô',
-  HOOK: 'Gancho do robô',
+  HOOK: 'Cruzado do robô',
   UPPERCUT: 'Uppercut do robô',
   RETURNING: 'Retornando ao corpo',
 }

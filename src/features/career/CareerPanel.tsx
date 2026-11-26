@@ -12,7 +12,7 @@ import type { MatchWinner } from '../../types/combat'
 import { arenaOption, OPPONENT_NAME } from '../customization/catalog'
 
 const dateFormat = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
-const stepNames = { straight: 'Soco', hook: 'Gancho', uppercut: 'Uppercut' } as const
+const stepNames = { straight: 'Soco', hook: 'Cruzado', uppercut: 'Uppercut' } as const
 
 function percent(value: number): string { return `${Math.round(value * 100)}%` }
 function resultLabel(winner: MatchWinner): string { return winner === 'player' ? 'Vitória' : winner === 'opponent' ? 'Derrota' : 'Empate' }

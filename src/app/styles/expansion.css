@@ -531,3 +531,157 @@
     flex: 1 1 auto;
   }
 }
+
+/* Overdrive special (fase 9) */
+.combat-overdrive {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 5px;
+}
+
+.combat-fighter-hud.is-opponent .combat-overdrive {
+  flex-direction: row-reverse;
+}
+
+.combat-overdrive-track {
+  flex: 1;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: #15232dd9;
+  box-shadow: inset 0 0 0 1px #6f8ea055;
+}
+
+.combat-overdrive-track > span {
+  display: block;
+  height: 100%;
+  transform-origin: left;
+  background: #b9a6ff;
+  transition: transform .2s ease-out;
+}
+
+.combat-fighter-hud.is-opponent .combat-overdrive-track > span {
+  transform-origin: right;
+}
+
+.combat-overdrive > small {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #8ea4b3;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: .7px;
+  white-space: nowrap;
+}
+
+.combat-overdrive.is-ready .combat-overdrive-track > span {
+  background: #e8ddff;
+  animation: overdrive-ready 0.9s ease-in-out infinite alternate;
+}
+
+.combat-overdrive.is-ready > small {
+  color: #e8ddff;
+}
+
+@keyframes overdrive-ready {
+  from { opacity: 0.65; }
+  to { opacity: 1; }
+}
+
+.combat-overdrive-hint {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 7px 14px;
+  transform: translateX(-50%);
+  border: 1px solid #b9a6ff88;
+  border-radius: 4px;
+  background: #120f22e6;
+  color: #e8ddff;
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.combat-overdrive-hint > span {
+  color: #b7aed6;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.combat-special {
+  position: absolute;
+  top: 26%;
+  left: 50%;
+  z-index: 5;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  animation: special-burst 1.5s ease-out forwards;
+}
+
+.combat-special > small {
+  color: #cfc4f5;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1.4px;
+}
+
+.combat-special > strong {
+  color: #f4f0ff;
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-shadow: 0 0 18px #9d84ff, 0 0 2px #fff;
+}
+
+.combat-special.is-opponent > strong {
+  text-shadow: 0 0 18px #ff9a5c, 0 0 2px #fff;
+}
+
+@keyframes special-burst {
+  0% { opacity: 0; transform: translateX(-50%) scale(1.25); }
+  12% { opacity: 1; transform: translateX(-50%) scale(1); }
+  75% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(-50%) scale(0.98); }
+}
+
+@media (max-width: 640px) {
+  .combat-special > strong {
+    font-size: 26px;
+  }
+
+  .combat-overdrive > small {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .combat-special,
+  .combat-overdrive.is-ready .combat-overdrive-track > span {
+    animation: none;
+  }
+}
+
+/* The knockout fall and slow motion play before the outcome covers the ring. */
+.combat-stage-banner.is-outcome {
+  animation: outcome-in .35s ease-out 1.5s both;
+}
+
+@keyframes outcome-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .combat-stage-banner.is-outcome {
+    animation: none;
+  }
+}
